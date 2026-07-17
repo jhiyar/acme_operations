@@ -1,0 +1,13 @@
+---
+description: Clean code standards for the whole monorepo
+alwaysApply: true
+---
+
+# Clean Code
+
+- Small functions and classes with a single responsibility
+- Prefer clear names over comments; comment only non-obvious intent
+- Avoid deep nesting; early-return instead
+- No unused imports, dead code, or speculative abstractions
+- Match existing naming and file layout before inventing new patterns
+- Keep PRs/changes focused — do not refactor unrelated code

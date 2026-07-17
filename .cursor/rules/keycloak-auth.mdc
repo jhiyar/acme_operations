@@ -1,0 +1,14 @@
+---
+description: Keycloak authentication conventions
+globs: "{backend/**/*.py,frontend/src/**/*.{ts,tsx}}"
+alwaysApply: false
+---
+
+# Keycloak Auth
+
+- Users authenticate via Keycloak realm `acme` (Docker Compose service `keycloak`)
+- Frontend: `AuthService` obtains tokens (password grant) and stores them; `HttpService` attaches `Authorization: Bearer`
+- Backend: `KeycloakJWTAuthentication` validates JWTs via Keycloak JWKS
+- Realm roles: `sales_user`, `support_user`, `admin`
+- Protected API views require auth + appropriate role permissions
+- Do not mock Keycloak for the real auth path

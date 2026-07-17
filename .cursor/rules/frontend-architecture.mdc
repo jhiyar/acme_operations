@@ -1,0 +1,72 @@
+---
+description: React TS frontend folder structure, features, widgets, and data fetching
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Architecture
+
+## Folder structure
+
+```
+frontend/src/
+  features/
+    core/                    # app shell, auth gate, shared layout only
+    feature_auth/
+      LoginPage.tsx
+      services/              # AuthService, etc.
+    feature_issues/
+      IssuesPage.tsx
+      hooks/                 # useIssues, etc.
+      components/            # feature-only UI
+    feature_chat/
+      ChatPage.tsx
+      components/
+      hooks/
+    feature_<name>/
+      <Page>.tsx
+      hooks/
+      components/
+      services/
+  widgets/                   # truly shared, reusable across features only
+  services/                  # cross-cutting infra only (e.g. HttpService)
+  routes/
+    MainRoutes.tsx
+  cms/
+    routes/CmsRoutes.tsx
+```
+
+## Feature colocation (required)
+
+- Put **hooks, components, and services with the feature that uses them**
+- Example: `useIssues` lives in `features/feature_issues/hooks/`, not `src/hooks/`
+- Do **not** create global `src/hooks/` for feature logic
+- `widgets/` and `src/services/` are only for code reused by **multiple** features
+- If unsure, default to the feature folder
+
+## Features
+
+- New domains go in `features/feature_<name>/`
+- `features/core` holds shell/layout/auth gate only
+- Feature folders own their pages + local hooks/components/services
+
+## Widgets
+
+- Prefer small reusable widgets in `widgets/` only when shared across features
+- Feature-specific UI stays under that feature’s `components/`
+
+## Data & forms
+
+- Load server data with **TanStack Query** (`useQuery` / `useMutation`)
+- Forms with **React Hook Form**
+- Feature hooks encapsulate fetch logic
+
+## HTTP
+
+- All API calls go through `HttpService` (`get`, `post`, `put`, `patch`, `delete`)
+- Do not call `fetch`/`axios` directly from page components
+
+## Routing
+
+- Register app routes only in `routes/MainRoutes.tsx`
+- Register CMS/admin routes only in `cms/routes/CmsRoutes.tsx`

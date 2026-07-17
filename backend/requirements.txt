@@ -1,0 +1,13 @@
+PyJWT>=2.8
+cryptography>=42,<45
+requests>=2.31
+Django>=4.2,<5
+djangorestframework>=3.15
+django-cors-headers>=4.3
+psycopg[binary]>=3.1
+anthropic>=0.40
+openai>=1.40
+langchain>=0.3
+langgraph>=0.2
+langchain-anthropic>=0.3
+langchain-openai>=0.3

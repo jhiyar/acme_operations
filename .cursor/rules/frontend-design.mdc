@@ -1,0 +1,15 @@
+---
+description: Clean, modern, minimalistic UI design standards
+globs: frontend/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# Frontend Design
+
+- Clean, modern, **minimalistic** UI — prefer whitespace and hierarchy over decoration
+- Small reusable widgets; avoid oversized one-off layouts
+- Consistent spacing, typography, and color tokens
+- No visual clutter: skip unnecessary borders, shadows, pills, badge stacks, and icon rows
+- Prefer clear typography and subtle surfaces over heavy card chrome
+- Responsive by default (desktop + mobile)
+- Match existing design tokens/patterns when extending the app

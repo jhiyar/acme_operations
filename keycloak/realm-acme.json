@@ -1,0 +1,103 @@
+{
+  "realm": "acme",
+  "enabled": true,
+  "displayName": "Acme Operations",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "sales_user",
+        "description": "Read-only access to customer and issue data"
+      },
+      {
+        "name": "support_user",
+        "description": "Read and update access for issues"
+      },
+      {
+        "name": "admin",
+        "description": "Full access including next actions"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "acme-frontend",
+      "name": "Acme Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "http://localhost:5173",
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173", "http://127.0.0.1:5173", "+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": ["address", "phone", "offline_access"]
+    }
+  ],
+  "users": [
+    {
+      "username": "sales",
+      "enabled": true,
+      "email": "sales@acme.local",
+      "emailVerified": true,
+      "firstName": "Sam",
+      "lastName": "Sales",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sales123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["sales_user"]
+    },
+    {
+      "username": "support",
+      "enabled": true,
+      "email": "support@acme.local",
+      "emailVerified": true,
+      "firstName": "Sara",
+      "lastName": "Support",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "support123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["support_user"]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@acme.local",
+      "emailVerified": true,
+      "firstName": "Alex",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    }
+  ]
+}

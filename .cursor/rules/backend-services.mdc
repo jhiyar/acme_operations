@@ -1,0 +1,33 @@
+---
+description: Django DRF backend — service-based OOP architecture
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend: Service-Based OOP
+
+Implement domain logic as **service classes**, not in views or serializers.
+
+## Pattern
+
+```python
+# services/llm_service.py
+class LlmService:
+    def call(self, prompt: str, **kwargs) -> str:
+        ...
+
+# views.py — thin; delegate to services
+class GenerateView(APIView):
+    def post(self, request):
+        result = LlmService().call(request.data["prompt"])
+        return Response({"result": result})
+```
+
+## Rules
+
+- One service class per concern (`LlmService`, `UserService`, `AuthService`, …)
+- Public methods are verbs: `call`, `create`, `update`, `delete`, `get`, `list`
+- Views/viewsets stay thin: validate → call service → return response
+- Serializers handle input/output shaping only; no heavy business logic
+- Prefer dependency injection via constructor when a service needs collaborators
+- Keep services under `apps/<app>/services/`

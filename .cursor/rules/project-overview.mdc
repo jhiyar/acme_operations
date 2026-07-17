@@ -1,0 +1,16 @@
+---
+description: Project stack and high-level architecture for Acme Operations
+alwaysApply: true
+---
+
+# Acme Operations
+
+- **Frontend**: React + TypeScript (Vite)
+- **Backend**: Django + Django REST Framework (DRF)
+
+## Architecture principles
+
+- Prefer clean, readable, maintainable code over clever abstractions
+- Keep modules small and single-purpose
+- UI: clean, modern, minimalistic — no visual clutter
+- Never put business logic in views/components; use services (backend) and hooks/services (frontend)
