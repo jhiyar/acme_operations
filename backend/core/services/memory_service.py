@@ -106,18 +106,3 @@ class MemoryService:
         key = f"acme:cache:customer:{customer_name.strip().lower()}"
         raw = client.get(key)
         return json.loads(raw) if raw else None
-
-    def cache_tool_result(self, tool: str, args_key: str, result: dict[str, Any]) -> None:
-        client = self.client
-        if not client:
-            return
-        key = f"acme:cache:tool:{tool}:{args_key}"
-        client.setex(key, settings.REDIS_TOOL_TTL_SECONDS, json.dumps(result, default=str))
-
-    def get_cached_tool_result(self, tool: str, args_key: str) -> dict[str, Any] | None:
-        client = self.client
-        if not client:
-            return None
-        key = f"acme:cache:tool:{tool}:{args_key}"
-        raw = client.get(key)
-        return json.loads(raw) if raw else None

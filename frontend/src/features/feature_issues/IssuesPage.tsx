@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button } from "../../widgets/Button";
 import { CustomModal } from "../../widgets/CustomModal";
 import { useAuth } from "../core/AuthProvider";
 import { IssueForm } from "./components/IssueForm";
@@ -30,18 +31,18 @@ function IssueRow({
   canEdit,
   canManage,
   onEdit,
+  onDelete,
 }: {
   issue: Issue;
   canEdit: boolean;
   canManage: boolean;
   onEdit: (issueId: number) => void;
+  onDelete: (issue: Issue) => void;
 }) {
   const [note, setNote] = useState("");
   const updateIssue = useUpdateIssue();
   const addUpdate = useAddIssueUpdate();
-  const deleteIssue = useDeleteIssue();
-  const busy =
-    updateIssue.isPending || addUpdate.isPending || deleteIssue.isPending;
+  const busy = updateIssue.isPending || addUpdate.isPending;
 
   return (
     <article className="issue-row">
@@ -73,22 +74,10 @@ function IssueRow({
             type="button"
             className="btn btn-ghost btn-compact issue-delete"
             disabled={busy}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Delete issue #${issue.id} “${issue.title}”? This cannot be undone.`,
-                )
-              ) {
-                return;
-              }
-              deleteIssue.mutate(issue.id);
-            }}
+            onClick={() => onDelete(issue)}
           >
             Delete
           </button>
-          {deleteIssue.isError ? (
-            <p className="error issue-edit-error">Delete failed — admin only.</p>
-          ) : null}
         </div>
       ) : null}
 
@@ -163,12 +152,22 @@ export function IssuesPage() {
   const [modalIssueId, setModalIssueId] = useState<number | null | undefined>(
     undefined,
   );
+  const [issueToDelete, setIssueToDelete] = useState<Issue | null>(null);
+  const deleteIssue = useDeleteIssue();
   const { data, isLoading, isError, error, refetch, isFetching } = useIssues({
     status: status || undefined,
   });
 
   const modalOpen = modalIssueId !== undefined;
   const isCreate = modalIssueId === null;
+
+  const closeDeleteDialog = () => {
+    if (deleteIssue.isPending) {
+      return;
+    }
+    setIssueToDelete(null);
+    deleteIssue.reset();
+  };
 
   return (
     <div className="issues-page">
@@ -245,6 +244,7 @@ export function IssuesPage() {
               canEdit={canEdit}
               canManage={isAdmin}
               onEdit={(issueId) => setModalIssueId(issueId)}
+              onDelete={setIssueToDelete}
             />
           ))}
         </div>
@@ -260,6 +260,49 @@ export function IssuesPage() {
           onCancel={() => setModalIssueId(undefined)}
           onSuccess={() => setModalIssueId(undefined)}
         />
+      </CustomModal>
+
+      <CustomModal
+        open={issueToDelete != null}
+        title="Delete issue"
+        onClose={closeDeleteDialog}
+      >
+        {issueToDelete ? (
+          <div className="confirm-dialog">
+            <p>
+              Delete issue #{issueToDelete.id} “{issueToDelete.title}”? This cannot
+              be undone.
+            </p>
+            {deleteIssue.isError ? (
+              <p className="error">Delete failed — check permissions and try again.</p>
+            ) : null}
+            <div className="issue-form-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={deleteIssue.isPending}
+                onClick={closeDeleteDialog}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={deleteIssue.isPending}
+                onClick={() => {
+                  deleteIssue.mutate(issueToDelete.id, {
+                    onSuccess: () => {
+                      setIssueToDelete(null);
+                      deleteIssue.reset();
+                    },
+                  });
+                }}
+              >
+                {deleteIssue.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </CustomModal>
     </div>
   );

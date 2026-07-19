@@ -24,22 +24,19 @@ class IssueService:
             return qs
         return qs.filter(assigned_to__iexact=user.username)
 
-    def list_for_user(
-        self,
-        user: KeycloakUser,
-        *,
-        status: str | None = None,
-        customer_name: str | None = None,
-    ) -> list[dict[str, Any]]:
-        qs = self.visible_to(user)
-        if status:
-            qs = qs.filter(status=status)
-        if customer_name:
-            qs = qs.filter(customer__name__iexact=customer_name.strip())
-        return [self.to_dict(issue) for issue in qs]
-
     def get_for_user(self, user: KeycloakUser, issue_id: int) -> Issue | None:
         return self.visible_to(user).filter(pk=issue_id).first()
+
+    @staticmethod
+    def _fail(*, created: bool | None = None, updated: bool | None = None, deleted: bool | None = None, error: str, code: str = "bad_request") -> dict[str, Any]:
+        payload: dict[str, Any] = {"error": error, "code": code}
+        if created is not None:
+            payload["created"] = created
+        if updated is not None:
+            payload["updated"] = updated
+        if deleted is not None:
+            payload["deleted"] = deleted
+        return payload
 
     def create_issue(
         self,
@@ -53,20 +50,24 @@ class IssueService:
         assigned_to: str = "",
     ) -> dict[str, Any]:
         if not can_manage_issues(user):
-            return {"created": False, "error": "Only admin can create issues"}
+            return self._fail(created=False, error="Only admin can create issues", code="forbidden")
 
         title = title.strip()
         if not title:
-            return {"created": False, "error": "Title is required"}
+            return self._fail(created=False, error="Title is required")
 
         customer = Customer.objects.filter(pk=customer_id).first()
         if not customer:
-            return {"created": False, "error": f"Customer #{customer_id} not found"}
+            return self._fail(
+                created=False,
+                error=f"Customer #{customer_id} not found",
+                code="not_found",
+            )
 
         if status not in Issue.Status.values:
-            return {"created": False, "error": f"Invalid status: {status}"}
+            return self._fail(created=False, error=f"Invalid status: {status}")
         if priority not in Issue.Priority.values:
-            return {"created": False, "error": f"Invalid priority: {priority}"}
+            return self._fail(created=False, error=f"Invalid priority: {priority}")
 
         issue = Issue.objects.create(
             customer=customer,
@@ -80,11 +81,15 @@ class IssueService:
 
     def delete_issue(self, user: KeycloakUser, issue_id: int) -> dict[str, Any]:
         if not can_manage_issues(user):
-            return {"deleted": False, "error": "Only admin can delete issues"}
+            return self._fail(deleted=False, error="Only admin can delete issues", code="forbidden")
 
         issue = self.get_for_user(user, issue_id)
         if not issue:
-            return {"deleted": False, "error": f"Issue #{issue_id} not found or not visible"}
+            return self._fail(
+                deleted=False,
+                error=f"Issue #{issue_id} not found or not visible",
+                code="not_found",
+            )
 
         issue.delete()
         return {"deleted": True, "id": issue_id}
@@ -102,26 +107,35 @@ class IssueService:
         customer_id: int | None = None,
     ) -> dict[str, Any]:
         if not can_update_issues(user):
-            return {"updated": False, "error": "Only support_user or admin can update issues"}
+            return self._fail(
+                updated=False,
+                error="Only support_user or admin can update issues",
+                code="forbidden",
+            )
 
         issue = self.get_for_user(user, issue_id)
         if not issue:
-            return {"updated": False, "error": f"Issue #{issue_id} not found or not visible"}
+            return self._fail(
+                updated=False,
+                error=f"Issue #{issue_id} not found or not visible",
+                code="not_found",
+            )
 
         # Full field edits require admin; support may only touch workflow fields.
         if not can_manage_issues(user) and any(
             value is not None for value in (title, description, customer_id)
         ):
-            return {
-                "updated": False,
-                "error": "Only admin can change title, description, or customer",
-            }
+            return self._fail(
+                updated=False,
+                error="Only admin can change title, description, or customer",
+                code="forbidden",
+            )
 
         fields: list[str] = []
         if title is not None:
             cleaned = title.strip()
             if not cleaned:
-                return {"updated": False, "error": "Title is required"}
+                return self._fail(updated=False, error="Title is required")
             issue.title = cleaned
             fields.append("title")
         if description is not None:
@@ -130,17 +144,21 @@ class IssueService:
         if customer_id is not None:
             customer = Customer.objects.filter(pk=customer_id).first()
             if not customer:
-                return {"updated": False, "error": f"Customer #{customer_id} not found"}
+                return self._fail(
+                    updated=False,
+                    error=f"Customer #{customer_id} not found",
+                    code="not_found",
+                )
             issue.customer_id = customer.id
             fields.append("customer_id")
         if status is not None:
             if status not in Issue.Status.values:
-                return {"updated": False, "error": f"Invalid status: {status}"}
+                return self._fail(updated=False, error=f"Invalid status: {status}")
             issue.status = status
             fields.append("status")
         if priority is not None:
             if priority not in Issue.Priority.values:
-                return {"updated": False, "error": f"Invalid priority: {priority}"}
+                return self._fail(updated=False, error=f"Invalid priority: {priority}")
             issue.priority = priority
             fields.append("priority")
         if assigned_to is not None:
@@ -148,7 +166,7 @@ class IssueService:
             fields.append("assigned_to")
 
         if not fields:
-            return {"updated": False, "error": "No updatable fields provided"}
+            return self._fail(updated=False, error="No updatable fields provided")
 
         fields.append("updated_at")
         issue.save(update_fields=fields)
@@ -165,18 +183,23 @@ class IssueService:
         body: str,
     ) -> dict[str, Any]:
         if not can_update_issues(user):
-            return {
-                "created": False,
-                "error": "Only support_user or admin can post issue updates",
-            }
+            return self._fail(
+                created=False,
+                error="Only support_user or admin can post issue updates",
+                code="forbidden",
+            )
 
         text = (body or "").strip()
         if not text:
-            return {"created": False, "error": "Update body is required"}
+            return self._fail(created=False, error="Update body is required")
 
         issue = self.get_for_user(user, issue_id)
         if not issue:
-            return {"created": False, "error": f"Issue #{issue_id} not found or not visible"}
+            return self._fail(
+                created=False,
+                error=f"Issue #{issue_id} not found or not visible",
+                code="not_found",
+            )
 
         update = IssueUpdate.objects.create(
             issue=issue,

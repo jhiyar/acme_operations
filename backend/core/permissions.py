@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Iterable
 
+from rest_framework.permissions import BasePermission
+
 if TYPE_CHECKING:
     from core.services.keycloak_auth_service import KeycloakUser
 
@@ -40,3 +42,19 @@ def is_support(user: KeycloakUser | None) -> bool:
 
 def can_use_assistant(user: KeycloakUser | None) -> bool:
     return has_any_role(user, ASSISTANT_ROLES)
+
+
+class IsAuthenticatedKeycloak(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and getattr(user, "is_authenticated", False))
+
+
+class CanUseAssistant(BasePermission):
+    def has_permission(self, request, view):
+        return can_use_assistant(request.user)
+
+
+class IsAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return is_admin(request.user)

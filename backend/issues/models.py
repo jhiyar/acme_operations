@@ -2,6 +2,12 @@ from django.db import models
 
 
 class Customer(models.Model):
+    """
+    Customer account.
+
+    Table name keeps the legacy `core_customer` prefix from the initial schema
+    before the issues app split — renaming would require a data migration.
+    """
     name = models.CharField(max_length=255, unique=True)
     industry = models.CharField(max_length=120, blank=True)
     tier = models.CharField(max_length=40, default="standard")

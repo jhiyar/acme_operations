@@ -20,12 +20,13 @@ def can_update_issues(user: KeycloakUser | None) -> bool:
 
 
 def can_manage_issues(user: KeycloakUser | None) -> bool:
-    """Create / delete / full edit — admin only for this prototype."""
+    """Create / delete / full field edit — admin only for this prototype."""
     return is_admin(user)
 
 
 def can_create_next_action(user: KeycloakUser | None) -> bool:
-    return is_admin(user) or is_support(user)
+    """Same gate as workflow updates: support + admin."""
+    return can_update_issues(user)
 
 
 class CanUpdateIssues(BasePermission):

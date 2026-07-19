@@ -163,7 +163,7 @@ class ChatServiceTests(TestCase):
         )
         reply = ChatService(agent=fake_agent).call("hi", user)
         self.assertEqual(reply.reply, "Hello from agent")
-        self.assertEqual(reply.role, "admin")
+        self.assertEqual(reply.role, "assistant")
         self.assertEqual(reply.tool_trace[0]["tool"], "get_customer_profile")
         self.assertTrue(reply.conversation_id)
         fake_agent.run.assert_called_once()

@@ -10,17 +10,18 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = "django-insecure-ve&%8jxfj##kvkbffpq24m%y#6v3go17ynp8bgrdgo&#zcu_z$"
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-local-dev-only-change-me",
+)
 
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
 
 ALLOWED_HOSTS = [
     h.strip()
     for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,backend").split(",")
     if h.strip()
 ]
-if ALLOWED_HOSTS == ["*"]:
-    ALLOWED_HOSTS = ["*"]
 
 KEYCLOAK_SERVER_URL = os.environ.get("KEYCLOAK_SERVER_URL", "http://localhost:8080")
 KEYCLOAK_ISSUER_URL = os.environ.get("KEYCLOAK_ISSUER_URL", KEYCLOAK_SERVER_URL)
@@ -117,9 +118,8 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "core.authentication.KeycloakJWTAuthentication",
     ],
-    "DEFAULT_FILTER_BACKENDS": [
-        "rest_framework.filters.SearchFilter",
-        "rest_framework.filters.OrderingFilter",
+    "DEFAULT_PERMISSION_CLASSES": [
+        "core.permissions.IsAuthenticatedKeycloak",
     ],
 }
 
@@ -159,4 +159,24 @@ OBSERVABILITY_WRITE_FILES = os.environ.get("OBSERVABILITY_WRITE_FILES", "true").
     "1",
     "true",
     "yes",
+}
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "acme": {
+            "handlers": ["console"],
+            "level": os.environ.get("LOG_LEVEL", "INFO"),
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+        },
+    },
 }

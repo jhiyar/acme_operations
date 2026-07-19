@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 @dataclass
 class ChatReply:
     reply: str
-    role: str
+    role: str  # message role — always "assistant" for chat replies
     conversation_id: str
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
     trace_id: str | None = None
@@ -60,7 +60,6 @@ class ChatService:
         conversation_id: UUID | str | None = None,
         session_id: str | None = None,
     ) -> ChatReply:
-        primary_role = user.roles[0] if user.roles else "user"
         conversation = self.conversations.ensure_for_user(user, conversation_id)
         effective_session = session_id or str(conversation.id)
         started = time.perf_counter()
@@ -106,7 +105,7 @@ class ChatService:
             )
             return ChatReply(
                 reply=result.reply,
-                role=primary_role,
+                role="assistant",
                 conversation_id=str(conversation.id),
                 tool_trace=result.tool_trace,
                 trace_id=trace.trace_id,

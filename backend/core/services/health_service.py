@@ -1,7 +1,7 @@
 class HealthService:
-    """Example service — domain logic lives here, not in views."""
+    """Liveness payload for the API process."""
 
-    def call(self) -> dict:
+    def check(self) -> dict:
         return {
             "status": "ok",
             "service": "acme-operations",

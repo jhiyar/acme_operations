@@ -17,6 +17,8 @@ docker compose up --build
 open http://localhost:5173
 ```
 
+Backend layout, commands, and API table: [`backend/README.md`](backend/README.md).
+
 Demo users (Keycloak):
 
 | User | Password | Role |

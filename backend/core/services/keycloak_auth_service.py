@@ -66,6 +66,8 @@ class KeycloakAuthService:
 
     def verify_token(self, token: str) -> KeycloakUser:
         signing_key = self._get_jwks_client().get_signing_key_from_jwt(token)
+        # Keycloak access tokens often put the client in `azp` rather than `aud`.
+        # Verify issuer + signature, then enforce client via azp/aud below.
         payload = jwt.decode(
             token,
             signing_key.key,

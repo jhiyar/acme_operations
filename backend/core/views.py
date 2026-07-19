@@ -1,15 +1,10 @@
-from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from core.authentication import (
-    CanUseAssistant,
-    IsAdmin,
-    IsAuthenticatedKeycloak,
-    KeycloakJWTAuthentication,
-)
+from core.authentication import KeycloakJWTAuthentication
 from core.models import AgentRun, Conversation
+from core.permissions import CanUseAssistant, IsAdmin, IsAuthenticatedKeycloak
 from core.serializers import AgentToolCallSerializer, ChatRequestSerializer
 from core.services import AgentToolService, ChatService, HealthService, KeycloakAuthService
 from core.services.agent_run_service import AgentRunService
@@ -23,7 +18,7 @@ class HealthView(generics.GenericAPIView):
     def get(self, request: Request) -> Response:
         from core.services.memory_service import MemoryService
 
-        result = HealthService().call()
+        result = HealthService().check()
         result["keycloak"] = KeycloakAuthService().health()
         memory = MemoryService()
         result["redis"] = {
@@ -76,11 +71,10 @@ class ConversationDetailView(generics.GenericAPIView):
 
     def get(self, request: Request, conversation_id) -> Response:
         service = ConversationService()
-        conversation = get_object_or_404(
-            Conversation,
-            pk=conversation_id,
-            owner_sub=request.user.sub,
-        )
+        try:
+            conversation = service.get_for_user(conversation_id, request.user)
+        except Conversation.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(service.to_detail(conversation))
 
     def delete(self, request: Request, conversation_id) -> Response:
@@ -171,7 +165,7 @@ class AgentRunDetailView(generics.GenericAPIView):
 
 
 class AgentToolsView(generics.GenericAPIView):
-    """List available agent tools (for UI/debug and future agent wiring)."""
+    """List agent tool specs (debug / eval harness)."""
 
     authentication_classes = [KeycloakJWTAuthentication]
     permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant]
@@ -179,9 +173,10 @@ class AgentToolsView(generics.GenericAPIView):
     def get(self, request: Request) -> Response:
         return Response({"tools": AgentToolService().tool_specs()})
 
+
 class AgentToolCallView(generics.GenericAPIView):
     """
-    Invoke a single agent tool by name.
+    Invoke a single agent tool by name (debug / eval).
 
     Body: { "tool": "get_open_issues_for_customer", "args": { "customer_name": "..." } }
     """

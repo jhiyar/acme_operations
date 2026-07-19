@@ -5,6 +5,9 @@ Exposes the same domain tools as the LangGraph agent, but as an MCP server so
 external clients (Cursor, Claude Desktop, other agents) can call them without
 embedding Acme business logic.
 
+Local demo caveat: tools run as a synthetic Keycloak admin user so MCP callers
+do not need to pass end-user JWTs. Do not treat this as a production auth model.
+
 Run (Docker / Python 3.10+):
   python -m mcp_server
 """

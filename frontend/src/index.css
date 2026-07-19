@@ -512,6 +512,26 @@ h1 {
   color: var(--ink);
 }
 
+.btn-danger {
+  background: #8c2828;
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #752020;
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 1rem;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
 .bubble-tools {
   margin-top: 0.45rem !important;
   font-size: 0.78rem;
