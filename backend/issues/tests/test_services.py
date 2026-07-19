@@ -130,3 +130,53 @@ class IssueServiceTests(TestCase):
             IssueUpdate.objects.filter(issue=self.other_issue).count(),
             1,
         )
+
+    def test_admin_can_create_issue(self) -> None:
+        admin = make_user("admin", "admin")
+        result = self.service.create_issue(
+            admin,
+            customer_id=self.customer.id,
+            title="New plant access",
+            description="Badge request",
+            priority=Issue.Priority.HIGH,
+            assigned_to="support",
+        )
+        self.assertTrue(result["created"])
+        self.assertEqual(result["issue"]["title"], "New plant access")
+        self.assertTrue(Issue.objects.filter(title="New plant access").exists())
+
+    def test_support_cannot_create_issue(self) -> None:
+        support = make_user("support", "support_user")
+        result = self.service.create_issue(
+            support,
+            customer_id=self.customer.id,
+            title="Should fail",
+        )
+        self.assertFalse(result["created"])
+
+    def test_admin_can_edit_title_and_delete(self) -> None:
+        admin = make_user("admin", "admin")
+        updated = self.service.update_issue(
+            admin,
+            self.open_issue.id,
+            title="Renamed shipment issue",
+            description="Updated description",
+        )
+        self.assertTrue(updated["updated"])
+        self.open_issue.refresh_from_db()
+        self.assertEqual(self.open_issue.title, "Renamed shipment issue")
+
+        deleted = self.service.delete_issue(admin, self.open_issue.id)
+        self.assertTrue(deleted["deleted"])
+        self.assertFalse(Issue.objects.filter(pk=self.open_issue.id).exists())
+
+    def test_support_cannot_change_title(self) -> None:
+        support = make_user("support", "support_user")
+        result = self.service.update_issue(
+            support,
+            self.other_issue.id,
+            title="Hacked title",
+        )
+        self.assertFalse(result["updated"])
+        self.other_issue.refresh_from_db()
+        self.assertEqual(self.other_issue.title, "Support-only issue")

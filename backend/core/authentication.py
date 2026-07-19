@@ -5,7 +5,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
 
-from core.permissions import ASSISTANT_ROLES, can_update_issues, can_use_assistant, is_admin
+from core.permissions import ASSISTANT_ROLES, can_use_assistant, is_admin
 from core.services.keycloak_auth_service import KeycloakAuthService
 
 
@@ -56,13 +56,6 @@ class CanUseAssistant(BasePermission):
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         return is_admin(request.user)
-
-
-class CanUpdateIssues(BasePermission):
-    """support_user and admin may update issues / post timeline notes."""
-
-    def has_permission(self, request, view):
-        return can_update_issues(request.user)
 
 
 def keycloak_settings():

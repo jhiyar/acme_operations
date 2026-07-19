@@ -40,15 +40,3 @@ def is_support(user: KeycloakUser | None) -> bool:
 
 def can_use_assistant(user: KeycloakUser | None) -> bool:
     return has_any_role(user, ASSISTANT_ROLES)
-
-
-def can_view_all_issues(user: KeycloakUser | None) -> bool:
-    return is_admin(user)
-
-
-def can_create_next_action(user: KeycloakUser | None) -> bool:
-    return is_admin(user) or is_support(user)
-
-
-def can_update_issues(user: KeycloakUser | None) -> bool:
-    return is_admin(user) or is_support(user)

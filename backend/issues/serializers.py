@@ -70,13 +70,33 @@ class IssuePatchSerializer(serializers.Serializer):
         required=False,
     )
     assigned_to = serializers.CharField(required=False, allow_blank=False, max_length=120)
+    title = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    customer_id = serializers.IntegerField(required=False, min_value=1)
 
     def validate(self, attrs: dict) -> dict:
         if not attrs:
             raise serializers.ValidationError(
-                "Provide at least one of: status, priority, assigned_to"
+                "Provide at least one updatable field"
             )
         return attrs
+
+
+class IssueWriteSerializer(serializers.Serializer):
+    customer_id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    status = serializers.ChoiceField(
+        choices=Issue.Status.choices,
+        required=False,
+        default=Issue.Status.OPEN,
+    )
+    priority = serializers.ChoiceField(
+        choices=Issue.Priority.choices,
+        required=False,
+        default=Issue.Priority.MEDIUM,
+    )
+    assigned_to = serializers.CharField(required=False, allow_blank=True, max_length=120, default="")
 
 
 class IssueUpdateCreateSerializer(serializers.Serializer):

@@ -3,18 +3,18 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from core.authentication import (
-    CanUpdateIssues,
     CanUseAssistant,
     IsAuthenticatedKeycloak,
     KeycloakJWTAuthentication,
 )
-from core.permissions import can_view_all_issues
+from issues.permissions import CanManageIssues, CanUpdateIssues, can_view_all_issues
 from issues.serializers import (
     CustomerSerializer,
     IssueDetailSerializer,
     IssuePatchSerializer,
     IssueSerializer,
     IssueUpdateCreateSerializer,
+    IssueWriteSerializer,
 )
 from issues.services import CustomerService, IssueService
 
@@ -47,6 +47,22 @@ class IssueListView(generics.ListAPIView):
             }
         )
 
+    def post(self, request: Request) -> Response:
+        if not CanManageIssues().has_permission(request, self):
+            return Response(
+                {"detail": "Only admin can create issues"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = IssueWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = IssueService().create_issue(request.user, **serializer.validated_data)
+        if not result.get("created"):
+            return Response(
+                {"detail": result.get("error")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
+
 
 class IssueDetailView(generics.RetrieveAPIView):
     authentication_classes = [KeycloakJWTAuthentication]
@@ -78,6 +94,20 @@ class IssueDetailView(generics.RetrieveAPIView):
             )
             return Response({"detail": result.get("error")}, status=code)
         return Response(result)
+
+    def delete(self, request: Request, issue_id: int) -> Response:
+        if not CanManageIssues().has_permission(request, self):
+            return Response(
+                {"detail": "Only admin can delete issues"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        result = IssueService().delete_issue(request.user, issue_id)
+        if not result.get("deleted"):
+            return Response(
+                {"detail": result.get("error")},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class IssueUpdateCreateView(generics.GenericAPIView):

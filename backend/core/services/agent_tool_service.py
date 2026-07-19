@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from core.permissions import can_create_next_action
 from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm import get_llm_client
 from core.services.llm.base import LlmClient, LlmMessage
 from issues.models import Issue, IssueUpdate, NextAction
+from issues.permissions import can_create_next_action
 from issues.services.customer_service import CustomerService
 from issues.services.issue_service import IssueService
 

@@ -1,7 +1,13 @@
 import { useState } from "react";
 
+import { CustomModal } from "../../widgets/CustomModal";
 import { useAuth } from "../core/AuthProvider";
-import { useAddIssueUpdate, useUpdateIssue } from "./hooks/useIssueMutations";
+import { IssueForm } from "./components/IssueForm";
+import {
+  useAddIssueUpdate,
+  useDeleteIssue,
+  useUpdateIssue,
+} from "./hooks/useIssueMutations";
 import { useIssues, type Issue } from "./hooks/useIssues";
 
 const STATUS_OPTIONS = [
@@ -22,14 +28,20 @@ const EDITABLE_STATUSES = [
 function IssueRow({
   issue,
   canEdit,
+  canManage,
+  onEdit,
 }: {
   issue: Issue;
   canEdit: boolean;
+  canManage: boolean;
+  onEdit: (issueId: number) => void;
 }) {
   const [note, setNote] = useState("");
   const updateIssue = useUpdateIssue();
   const addUpdate = useAddIssueUpdate();
-  const busy = updateIssue.isPending || addUpdate.isPending;
+  const deleteIssue = useDeleteIssue();
+  const busy =
+    updateIssue.isPending || addUpdate.isPending || deleteIssue.isPending;
 
   return (
     <article className="issue-row">
@@ -46,6 +58,39 @@ function IssueRow({
         {issue.customer.name} · assigned to {issue.assigned_to}
       </p>
       {issue.description ? <p className="issue-desc">{issue.description}</p> : null}
+
+      {canManage ? (
+        <div className="issue-manage">
+          <button
+            type="button"
+            className="btn btn-ghost btn-compact"
+            disabled={busy}
+            onClick={() => onEdit(issue.id)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-compact issue-delete"
+            disabled={busy}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Delete issue #${issue.id} “${issue.title}”? This cannot be undone.`,
+                )
+              ) {
+                return;
+              }
+              deleteIssue.mutate(issue.id);
+            }}
+          >
+            Delete
+          </button>
+          {deleteIssue.isError ? (
+            <p className="error issue-edit-error">Delete failed — admin only.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {canEdit ? (
         <div className="issue-edit">
@@ -115,9 +160,15 @@ export function IssuesPage() {
   const canEdit =
     (user?.roles.includes("admin") || user?.roles.includes("support_user")) ?? false;
   const [status, setStatus] = useState("");
+  const [modalIssueId, setModalIssueId] = useState<number | null | undefined>(
+    undefined,
+  );
   const { data, isLoading, isError, error, refetch, isFetching } = useIssues({
     status: status || undefined,
   });
+
+  const modalOpen = modalIssueId !== undefined;
+  const isCreate = modalIssueId === null;
 
   return (
     <div className="issues-page">
@@ -148,11 +199,20 @@ export function IssuesPage() {
               >
                 Refresh
               </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-compact"
+                  onClick={() => setModalIssueId(null)}
+                >
+                  New issue
+                </button>
+              ) : null}
             </div>
           </div>
           <p className="muted issues-subtitle">
             {isAdmin
-              ? "Admin view — all customer issues across the organisation."
+              ? "Admin view — create, edit, and delete issues across the organisation."
               : canEdit
                 ? "Support view — update status and post notes on assigned issues."
                 : "Your assigned issues only (read-only)."}{" "}
@@ -179,10 +239,28 @@ export function IssuesPage() {
 
         <div className="issue-list">
           {data?.issues.map((issue) => (
-            <IssueRow key={issue.id} issue={issue} canEdit={canEdit} />
+            <IssueRow
+              key={issue.id}
+              issue={issue}
+              canEdit={canEdit}
+              canManage={isAdmin}
+              onEdit={(issueId) => setModalIssueId(issueId)}
+            />
           ))}
         </div>
       </section>
+
+      <CustomModal
+        open={modalOpen}
+        title={isCreate ? "New issue" : `Edit issue #${modalIssueId}`}
+        onClose={() => setModalIssueId(undefined)}
+      >
+        <IssueForm
+          id={modalIssueId}
+          onCancel={() => setModalIssueId(undefined)}
+          onSuccess={() => setModalIssueId(undefined)}
+        />
+      </CustomModal>
     </div>
   );
 }

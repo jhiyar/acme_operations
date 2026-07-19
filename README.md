@@ -117,11 +117,11 @@ The brief lists `users` or `user_roles` as a minimum schema item. **This prototy
 
 ### RBAC (demonstrated)
 
-| Role | Issues list | Update status / timeline note | Create next action (agent tool) |
-|------|-------------|-------------------------------|----------------------------------|
-| `sales_user` | Assigned only | No | No (tool returns RBAC error) |
-| `support_user` | Assigned only | Yes (`PATCH /api/issues/:id/`, `POST .../updates/`) | Yes |
-| `admin` | All issues | Yes | Yes |
+| Role | Issues list | Status / timeline note | Full CRUD (create / edit / delete) | Create next action (agent tool) |
+|------|-------------|------------------------|------------------------------------|----------------------------------|
+| `sales_user` | Assigned only | No | No | No (tool returns RBAC error) |
+| `support_user` | Assigned only | Yes (`PATCH` status, `POST .../updates/`) | No | Yes |
+| `admin` | All issues | Yes | Yes (`POST /api/issues/`, full `PATCH`, `DELETE`) | Yes |
 
 ## Agent tools
 

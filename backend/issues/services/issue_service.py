@@ -4,9 +4,9 @@ from typing import Any
 
 from django.db.models import Prefetch, Q, QuerySet
 
-from core.permissions import can_update_issues, can_view_all_issues
 from core.services.keycloak_auth_service import KeycloakUser
-from issues.models import Issue, IssueUpdate, NextAction
+from issues.models import Customer, Issue, IssueUpdate, NextAction
+from issues.permissions import can_manage_issues, can_update_issues, can_view_all_issues
 
 
 class IssueService:
@@ -41,6 +41,54 @@ class IssueService:
     def get_for_user(self, user: KeycloakUser, issue_id: int) -> Issue | None:
         return self.visible_to(user).filter(pk=issue_id).first()
 
+    def create_issue(
+        self,
+        user: KeycloakUser,
+        *,
+        customer_id: int,
+        title: str,
+        description: str = "",
+        status: str = Issue.Status.OPEN,
+        priority: str = Issue.Priority.MEDIUM,
+        assigned_to: str = "",
+    ) -> dict[str, Any]:
+        if not can_manage_issues(user):
+            return {"created": False, "error": "Only admin can create issues"}
+
+        title = title.strip()
+        if not title:
+            return {"created": False, "error": "Title is required"}
+
+        customer = Customer.objects.filter(pk=customer_id).first()
+        if not customer:
+            return {"created": False, "error": f"Customer #{customer_id} not found"}
+
+        if status not in Issue.Status.values:
+            return {"created": False, "error": f"Invalid status: {status}"}
+        if priority not in Issue.Priority.values:
+            return {"created": False, "error": f"Invalid priority: {priority}"}
+
+        issue = Issue.objects.create(
+            customer=customer,
+            title=title,
+            description=(description or "").strip(),
+            status=status,
+            priority=priority,
+            assigned_to=(assigned_to or user.username).strip(),
+        )
+        return {"created": True, "issue": self.to_dict(issue, include_history=True)}
+
+    def delete_issue(self, user: KeycloakUser, issue_id: int) -> dict[str, Any]:
+        if not can_manage_issues(user):
+            return {"deleted": False, "error": "Only admin can delete issues"}
+
+        issue = self.get_for_user(user, issue_id)
+        if not issue:
+            return {"deleted": False, "error": f"Issue #{issue_id} not found or not visible"}
+
+        issue.delete()
+        return {"deleted": True, "id": issue_id}
+
     def update_issue(
         self,
         user: KeycloakUser,
@@ -49,6 +97,9 @@ class IssueService:
         status: str | None = None,
         priority: str | None = None,
         assigned_to: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+        customer_id: int | None = None,
     ) -> dict[str, Any]:
         if not can_update_issues(user):
             return {"updated": False, "error": "Only support_user or admin can update issues"}
@@ -57,7 +108,31 @@ class IssueService:
         if not issue:
             return {"updated": False, "error": f"Issue #{issue_id} not found or not visible"}
 
+        # Full field edits require admin; support may only touch workflow fields.
+        if not can_manage_issues(user) and any(
+            value is not None for value in (title, description, customer_id)
+        ):
+            return {
+                "updated": False,
+                "error": "Only admin can change title, description, or customer",
+            }
+
         fields: list[str] = []
+        if title is not None:
+            cleaned = title.strip()
+            if not cleaned:
+                return {"updated": False, "error": "Title is required"}
+            issue.title = cleaned
+            fields.append("title")
+        if description is not None:
+            issue.description = description.strip()
+            fields.append("description")
+        if customer_id is not None:
+            customer = Customer.objects.filter(pk=customer_id).first()
+            if not customer:
+                return {"updated": False, "error": f"Customer #{customer_id} not found"}
+            issue.customer_id = customer.id
+            fields.append("customer_id")
         if status is not None:
             if status not in Issue.Status.values:
                 return {"updated": False, "error": f"Invalid status: {status}"}
