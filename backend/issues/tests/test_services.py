@@ -95,3 +95,38 @@ class IssueServiceTests(TestCase):
         self.assertEqual(data["title"], "Open shipment issue")
         self.assertEqual(len(data["updates"]), 1)
         self.assertEqual(data["updates"][0]["body"], "Customer asked for ETA")
+
+    def test_support_can_update_assigned_issue_status(self) -> None:
+        support = make_user("support", "support_user")
+        result = self.service.update_issue(
+            support,
+            self.other_issue.id,
+            status=Issue.Status.RESOLVED,
+        )
+        self.assertTrue(result["updated"])
+        self.other_issue.refresh_from_db()
+        self.assertEqual(self.other_issue.status, Issue.Status.RESOLVED)
+
+    def test_sales_cannot_update_issue(self) -> None:
+        sales = make_user("sales", "sales_user")
+        result = self.service.update_issue(
+            sales,
+            self.open_issue.id,
+            status=Issue.Status.CLOSED,
+        )
+        self.assertFalse(result["updated"])
+        self.open_issue.refresh_from_db()
+        self.assertEqual(self.open_issue.status, Issue.Status.OPEN)
+
+    def test_support_can_add_timeline_note(self) -> None:
+        support = make_user("support", "support_user")
+        result = self.service.add_update(
+            support,
+            self.other_issue.id,
+            body="Called customer; waiting on logs.",
+        )
+        self.assertTrue(result["created"])
+        self.assertEqual(
+            IssueUpdate.objects.filter(issue=self.other_issue).count(),
+            1,
+        )

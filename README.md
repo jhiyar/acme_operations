@@ -22,13 +22,56 @@ Demo users (Keycloak):
 | User | Password | Role |
 |------|----------|------|
 | `sales` | `sales123` | sales_user (read) |
-| `support` | `support123` | support_user (read + next actions) |
-| `admin` | `admin123` | admin |
+| `support` | `support123` | support_user (read + update issues + next actions) |
+| `admin` | `admin123` | admin (all issues + updates + next actions) |
 
-## Architecture
+## Architecture diagram
+
+```mermaid
+flowchart TB
+  subgraph clients [Clients]
+    UI[React UI :5173]
+    Ext[External MCP hosts]
+  end
+
+  subgraph compose [Docker Compose]
+    KC[Keycloak :8080]
+    API[Django/DRF API :8000]
+    MCP[MCP server :8001]
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+    KCPG[(Keycloak Postgres)]
+  end
+
+  subgraph agent [Agent runtime]
+    LG[LangGraph ReAct]
+    Tools[AgentToolService]
+    Skill[Customer Escalation Summary Skill]
+    LLM[Anthropic / OpenAI]
+  end
+
+  UI -->|OIDC login| KC
+  UI -->|Bearer JWT| API
+  API --> LG
+  LG --> Tools
+  LG --> Skill
+  LG --> LLM
+  Skill --> Tools
+  Tools --> PG
+  API --> PG
+  API --> Redis
+  LG --> Redis
+  API -.->|validate JWT| KC
+  KC --> KCPG
+  Ext -->|SSE tools| MCP
+  MCP --> Tools
+  MCP --> Skill
+```
+
+ASCII summary of the same flow:
 
 ```
-Browser (React)
+Browser (React + Keycloak login)
     │  JWT
     ▼
 Django/DRF API ──► LangGraph ReAct agent
@@ -37,9 +80,9 @@ Django/DRF API ──► LangGraph ReAct agent
     │                    ├─ CustomerEscalationSummarySkill
     │                    └─ LLM (Anthropic / OpenAI-compatible)
     │
-    ├── PostgreSQL (customers, issues, updates, next_actions)
-    ├── Redis (session memory, customer cache, traces)
-    ├── Keycloak
+    ├── PostgreSQL (customers, issues, chat, agent runs)
+    ├── Redis (warm session / caches)
+    ├── Keycloak (+ dedicated Postgres)
     └── MCP server (same tools over Model Context Protocol)
 ```
 
@@ -57,16 +100,28 @@ MCP separates **tool definitions/transport** from the **agent runtime**. The Lan
 
 The **Customer Escalation Summary** skill returns executive summary, risk level, recommended next action, and missing information.
 
+## Data & auth trade-offs
+
 ### Redis vs Postgres
 
 | Store | Holds |
 |-------|--------|
-| **Postgres** | Durable customers, issues, chat conversations/messages, agent-run traces (source of truth) |
+| **Postgres** | Durable customers, issues, updates, next actions, chat conversations/messages, agent-run traces |
 | **Redis** | Warm session cache, customer/tool caches, short-TTL debug traces |
 
-Chat agent context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from Postgres, with each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200) so long replies don’t blow the prompt. Redis is rehydrated from Postgres when empty; if Redis is down, multi-turn chat still works via Postgres.
+Chat agent context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from **Postgres**, with each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200). Redis is rehydrated when empty; if Redis is down, multi-turn chat still works via Postgres.
 
-Trade-off: older turns outside the window are not sent to the model (unless you later add a rolling summary). Losing Redis does not lose operational or chat data.
+### `users` / `user_roles` tables
+
+The brief lists `users` or `user_roles` as a minimum schema item. **This prototype does not duplicate users in Postgres.** Identities and roles (`sales_user`, `support_user`, `admin`) live in **Keycloak**; the API trusts the JWT and enforces RBAC in services/views. Rationale: one source of truth for authn/z, less sync drift, Keycloak is already a hard requirement. A local mirror table would only help offline reporting — deferred intentionally.
+
+### RBAC (demonstrated)
+
+| Role | Issues list | Update status / timeline note | Create next action (agent tool) |
+|------|-------------|-------------------------------|----------------------------------|
+| `sales_user` | Assigned only | No | No (tool returns RBAC error) |
+| `support_user` | Assigned only | Yes (`PATCH /api/issues/:id/`, `POST .../updates/`) | Yes |
+| `admin` | All issues | Yes | Yes |
 
 ## Agent tools
 
@@ -78,27 +133,30 @@ Trade-off: older turns outside the window are not sent to the model (unless you 
 
 ## Evaluation & observability
 
+**Latest live harness result: 15/15** (Anthropic `claude-sonnet-4-5-20250929`).
+
+Full eval narrative (case map, earlier failures/fixes, limits, brief mapping):  
+**[`backend/evals/RESULTS.md`](backend/evals/RESULTS.md)** — sits beside raw `evals/results/latest.md` (gitignored machine output).
+
 ```bash
 cd backend
 python manage.py eval_agent --provider anthropic
-# Results: backend/evals/results/latest.json + latest.md
+# Raw output (gitignored): backend/evals/results/latest.json + latest.md
 
-# DeepEval (LLM-as-judge on stored AgentRun replies)
+# Optional DeepEval judge on stored AgentRun replies
 python manage.py eval_deepeval
 ```
 
-Eval checks: tool selection, grounding keywords, RBAC, next-action / skill behaviour.
+Coverage snapshot: tool selection, grounding, RBAC, next-action + skill, Redis memory/cache. Earlier fixes included model id, partial customer names, and Client X keyword match.
 
 Observability on each `/api/chat/` request:
 
-- `tool_trace` in the response
-- `trace_id` + `latency_ms` + token totals
-- Durable Postgres rows: `AgentRun`, `LlmCall`, `ToolCall`
-- Admin UI at `/observability` (admin role)
+- `tool_trace`, `trace_id`, `latency_ms`, token totals
+- Durable Postgres: `AgentRun`, `LlmCall`, `ToolCall`
+- Admin UI at `/observability` (admin only)
 - Structured logs (`acme.llm`, `acme.observability`)
-- Trace JSON under `backend/evals/traces/` (and Redis when available)
 
-Manual live smoke:
+Chat UX: conversation list/resume, Markdown replies, expandable Markdown/JSON on Observability.
 
 ```bash
 python manage.py run_agent_smoke --message "Summarise Contoso open issues"
@@ -119,6 +177,15 @@ cd backend
 python manage.py test core.tests issues.tests
 ```
 
+## Deliverables map
+
+| Pack item | Where |
+|-----------|--------|
+| Code + Compose | this repo |
+| README / architecture diagram | this file (mermaid above) |
+| Eval results + commentary | [`backend/evals/RESULTS.md`](backend/evals/RESULTS.md) + local `evals/results/` |
+| AI usage notes | section below |
+
 ## AI tool usage notes (assessment)
 
-AI coding assistants (Cursor) were used to scaffold services, MCP wiring, and tests. Human review focused on RBAC, tool contracts, seed realism, Docker env handling, and eval failures (model IDs, partial customer names, keyword search). LLM outputs for summarise / next-action / escalation are treated as assistive and grounded only via tool-fetched context.
+AI coding assistants (Cursor) were used to scaffold services, MCP wiring, frontend widgets, and tests. Human review focused on RBAC, tool contracts, seed realism, Docker env handling (`backend/.env`), and eval failures (model IDs, partial customer names, keyword search). LLM outputs for summarise / next-action / escalation are treated as assistive and grounded only via tool-fetched context. Secrets never belong in git; API keys stay in local `.env`.

@@ -4,7 +4,7 @@ from typing import Any
 
 from django.db.models import Prefetch, Q, QuerySet
 
-from core.permissions import can_view_all_issues
+from core.permissions import can_update_issues, can_view_all_issues
 from core.services.keycloak_auth_service import KeycloakUser
 from issues.models import Issue, IssueUpdate, NextAction
 
@@ -40,6 +40,84 @@ class IssueService:
 
     def get_for_user(self, user: KeycloakUser, issue_id: int) -> Issue | None:
         return self.visible_to(user).filter(pk=issue_id).first()
+
+    def update_issue(
+        self,
+        user: KeycloakUser,
+        issue_id: int,
+        *,
+        status: str | None = None,
+        priority: str | None = None,
+        assigned_to: str | None = None,
+    ) -> dict[str, Any]:
+        if not can_update_issues(user):
+            return {"updated": False, "error": "Only support_user or admin can update issues"}
+
+        issue = self.get_for_user(user, issue_id)
+        if not issue:
+            return {"updated": False, "error": f"Issue #{issue_id} not found or not visible"}
+
+        fields: list[str] = []
+        if status is not None:
+            if status not in Issue.Status.values:
+                return {"updated": False, "error": f"Invalid status: {status}"}
+            issue.status = status
+            fields.append("status")
+        if priority is not None:
+            if priority not in Issue.Priority.values:
+                return {"updated": False, "error": f"Invalid priority: {priority}"}
+            issue.priority = priority
+            fields.append("priority")
+        if assigned_to is not None:
+            issue.assigned_to = assigned_to.strip()
+            fields.append("assigned_to")
+
+        if not fields:
+            return {"updated": False, "error": "No updatable fields provided"}
+
+        fields.append("updated_at")
+        issue.save(update_fields=fields)
+        return {
+            "updated": True,
+            "issue": self.to_dict(issue, include_history=True),
+        }
+
+    def add_update(
+        self,
+        user: KeycloakUser,
+        issue_id: int,
+        *,
+        body: str,
+    ) -> dict[str, Any]:
+        if not can_update_issues(user):
+            return {
+                "created": False,
+                "error": "Only support_user or admin can post issue updates",
+            }
+
+        text = (body or "").strip()
+        if not text:
+            return {"created": False, "error": "Update body is required"}
+
+        issue = self.get_for_user(user, issue_id)
+        if not issue:
+            return {"created": False, "error": f"Issue #{issue_id} not found or not visible"}
+
+        update = IssueUpdate.objects.create(
+            issue=issue,
+            author=user.username,
+            body=text,
+        )
+        return {
+            "created": True,
+            "update": {
+                "id": update.id,
+                "author": update.author,
+                "body": update.body,
+                "created_at": update.created_at.isoformat(),
+            },
+            "issue": self.to_dict(issue, include_history=True),
+        }
 
     def open_issues_for_customer(
         self,

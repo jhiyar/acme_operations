@@ -58,3 +58,31 @@ class CustomerSerializer(serializers.ModelSerializer):
             "contact_email",
             "notes",
         )
+
+
+class IssuePatchSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=Issue.Status.choices,
+        required=False,
+    )
+    priority = serializers.ChoiceField(
+        choices=Issue.Priority.choices,
+        required=False,
+    )
+    assigned_to = serializers.CharField(required=False, allow_blank=False, max_length=120)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs:
+            raise serializers.ValidationError(
+                "Provide at least one of: status, priority, assigned_to"
+            )
+        return attrs
+
+
+class IssueUpdateCreateSerializer(serializers.Serializer):
+    body = serializers.CharField(trim_whitespace=True)
+
+    def validate_body(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError("body is required")
+        return value

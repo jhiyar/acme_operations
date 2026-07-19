@@ -961,6 +961,38 @@ h1 {
   max-width: 65ch;
 }
 
+.issue-edit {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.issue-note-form {
+  display: flex;
+  gap: 0.4rem;
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.issue-note-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.82rem;
+  background: #fff;
+}
+
+.issue-edit-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
 .chat-stage {
   width: min(760px, calc(100% - 2rem));
   margin: 0 auto;
