@@ -5,6 +5,7 @@ __all__ = [
     "AgentService",
     "AgentToolService",
     "ChatService",
+    "ConversationService",
     "HealthService",
     "KeycloakAuthService",
     "KeycloakUser",
@@ -24,4 +25,8 @@ def __getattr__(name: str):
         from core.services.chat_service import ChatService
 
         return ChatService
+    if name == "ConversationService":
+        from core.services.conversation_service import ConversationService
+
+        return ConversationService
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -164,6 +164,7 @@ class ChatServiceTests(TestCase):
         self.assertEqual(reply.reply, "Hello from agent")
         self.assertEqual(reply.role, "admin")
         self.assertEqual(reply.tool_trace[0]["tool"], "get_customer_profile")
+        self.assertTrue(reply.conversation_id)
         fake_agent.run.assert_called_once()
         self.assertIsNotNone(reply.trace_id)
         self.assertIsNotNone(reply.latency_ms)

@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -7,8 +8,10 @@ from core.authentication import (
     IsAuthenticatedKeycloak,
     KeycloakJWTAuthentication,
 )
+from core.models import Conversation
 from core.serializers import AgentToolCallSerializer, ChatRequestSerializer
 from core.services import AgentToolService, ChatService, HealthService, KeycloakAuthService
+from core.services.conversation_service import ConversationService
 
 
 class HealthView(generics.GenericAPIView):
@@ -43,6 +46,49 @@ class MeView(generics.GenericAPIView):
         )
 
 
+class ConversationListCreateView(generics.GenericAPIView):
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant]
+
+    def get(self, request: Request) -> Response:
+        service = ConversationService()
+        conversations = service.list_for_user(request.user)
+        return Response(
+            {
+                "count": len(conversations),
+                "conversations": [service.to_summary(item) for item in conversations],
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        conversation = ConversationService().create(request.user)
+        return Response(
+            ConversationService().to_detail(conversation),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ConversationDetailView(generics.GenericAPIView):
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant]
+
+    def get(self, request: Request, conversation_id) -> Response:
+        service = ConversationService()
+        conversation = get_object_or_404(
+            Conversation,
+            pk=conversation_id,
+            owner_sub=request.user.sub,
+        )
+        return Response(service.to_detail(conversation))
+
+    def delete(self, request: Request, conversation_id) -> Response:
+        try:
+            ConversationService().delete_for_user(conversation_id, request.user)
+        except Conversation.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class ChatView(generics.GenericAPIView):
     authentication_classes = [KeycloakJWTAuthentication]
     permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant]
@@ -51,11 +97,18 @@ class ChatView(generics.GenericAPIView):
     def post(self, request: Request) -> Response:
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        session_id = (serializer.validated_data.get("session_id") or "").strip() or None
         try:
             result = ChatService().call(
                 serializer.validated_data["message"],
                 request.user,
-                session_id=serializer.validated_data.get("session_id") or "default",
+                conversation_id=serializer.validated_data.get("conversation_id"),
+                session_id=session_id,
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {"detail": "Conversation not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
         except RuntimeError as exc:
             return Response(
@@ -71,6 +124,7 @@ class ChatView(generics.GenericAPIView):
             {
                 "reply": result.reply,
                 "role": result.role,
+                "conversation_id": result.conversation_id,
                 "tool_trace": result.tool_trace,
                 "trace_id": result.trace_id,
                 "latency_ms": result.latency_ms,
