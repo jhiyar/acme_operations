@@ -16,8 +16,14 @@ class HealthView(generics.GenericAPIView):
     permission_classes: list = []
 
     def get(self, request: Request) -> Response:
+        from core.services.memory_service import MemoryService
+
         result = HealthService().call()
         result["keycloak"] = KeycloakAuthService().health()
+        memory = MemoryService()
+        result["redis"] = {
+            "status": "ok" if memory.enabled else "unavailable",
+        }
         return Response(result)
 
 
@@ -45,12 +51,29 @@ class ChatView(generics.GenericAPIView):
     def post(self, request: Request) -> Response:
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = ChatService().call(serializer.validated_data["message"], request.user)
+        try:
+            result = ChatService().call(
+                serializer.validated_data["message"],
+                request.user,
+                session_id=serializer.validated_data.get("session_id") or "default",
+            )
+        except RuntimeError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as exc:  # noqa: BLE001 — surface agent failures to the client
+            return Response(
+                {"detail": f"Assistant failed: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(
             {
                 "reply": result.reply,
                 "role": result.role,
                 "tool_trace": result.tool_trace,
+                "trace_id": result.trace_id,
+                "latency_ms": result.latency_ms,
             }
         )
 

@@ -8,7 +8,8 @@ from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm import get_llm_client
 from core.services.llm.base import LlmClient, LlmMessage
 from issues.models import Issue, IssueUpdate, NextAction
-from issues.services import CustomerService, IssueService
+from issues.services.customer_service import CustomerService
+from issues.services.issue_service import IssueService
 
 SUMMARISE_SYSTEM = (
     "You are an operations assistant. Summarise the issue history clearly and factually. "
@@ -35,10 +36,20 @@ class AgentToolService:
         customer_service: CustomerService | None = None,
         issue_service: IssueService | None = None,
         llm: LlmClient | None = None,
+        memory: Any | None = None,
     ) -> None:
         self.customers = customer_service or CustomerService()
         self.issues = issue_service or IssueService()
         self._llm = llm
+        self._memory = memory
+
+    @property
+    def memory(self):
+        if self._memory is None:
+            from core.services.memory_service import MemoryService
+
+            self._memory = MemoryService()
+        return self._memory
 
     @property
     def llm(self) -> LlmClient:
@@ -51,10 +62,25 @@ class AgentToolService:
         customer_name: str,
         user: KeycloakUser | None = None,
     ) -> dict[str, Any]:
+        cached = self.memory.get_cached_customer(customer_name)
+        if cached is not None:
+            return {**cached, "cache_hit": True}
+
         customer = self.customers.get_by_name(customer_name)
-        if not customer:
-            return {"found": False, "customer_name": customer_name}
-        return {"found": True, "customer": self.customers.to_dict(customer)}
+        if customer:
+            result = {"found": True, "customer": self.customers.to_dict(customer)}
+            self.memory.cache_customer(customer_name, result)
+            return result
+
+        matches = self.customers.find_matches(customer_name)
+        if matches:
+            return {
+                "found": False,
+                "customer_name": customer_name,
+                "candidates": [self.customers.to_dict(c) for c in matches],
+                "hint": "Multiple customers matched; retry with an exact name.",
+            }
+        return {"found": False, "customer_name": customer_name}
 
     def get_open_issues_for_customer(
         self,
@@ -62,18 +88,32 @@ class AgentToolService:
         user: KeycloakUser | None = None,
     ) -> dict[str, Any]:
         customer = self.customers.get_by_name(customer_name)
-        if not customer:
-            return {
-                "found": False,
-                "customer_name": customer_name,
-                "issues": [],
-            }
         issues = self.issues.open_issues_for_customer(customer_name, user=user)
+        if customer:
+            return {
+                "found": True,
+                "customer": self.customers.to_dict(customer),
+                "open_issue_count": len(issues),
+                "issues": issues,
+            }
+        if issues:
+            return {
+                "found": True,
+                "matched_by": "keyword",
+                "query": customer_name,
+                "open_issue_count": len(issues),
+                "issues": issues,
+                "hint": (
+                    "No exact customer match; returned open issues whose title, "
+                    "description, or customer name contains the query."
+                ),
+            }
+        matches = self.customers.find_matches(customer_name)
         return {
-            "found": True,
-            "customer": self.customers.to_dict(customer),
-            "open_issue_count": len(issues),
-            "issues": issues,
+            "found": False,
+            "customer_name": customer_name,
+            "issues": [],
+            "candidates": [self.customers.to_dict(c) for c in matches],
         }
 
     def summarise_issue_history(
@@ -151,6 +191,8 @@ class AgentToolService:
         args: dict[str, Any],
         user: KeycloakUser,
     ) -> dict[str, Any]:
+        from core.skills import CustomerEscalationSummarySkill
+
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
             "get_customer_profile": lambda: self.get_customer_profile(
                 str(args.get("customer_name", "")),
@@ -168,6 +210,9 @@ class AgentToolService:
                 int(args["issue_id"]),
                 user=user,
             ),
+            "customer_escalation_summary": lambda: CustomerEscalationSummarySkill(
+                tools=self
+            ).run(str(args.get("customer_name", "")), user),
         }
         if tool not in handlers:
             raise ValueError(f"Unknown tool: {tool}")
@@ -239,6 +284,24 @@ class AgentToolService:
                         },
                     },
                     "required": ["issue_id"],
+                },
+            },
+            {
+                "name": "customer_escalation_summary",
+                "description": (
+                    "Reusable Customer Escalation Summary skill: gather profile, open "
+                    "issues, issue summaries, then produce executive summary, risk level, "
+                    "recommended next action, and missing information."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_name": {
+                            "type": "string",
+                            "description": "Customer name",
+                        },
+                    },
+                    "required": ["customer_name"],
                 },
             },
         ]

@@ -34,6 +34,12 @@ class CustomerServiceTests(TestCase):
         assert found is not None
         self.assertEqual(found.pk, self.customer.pk)
 
+    def test_get_by_name_partial_match(self) -> None:
+        found = self.service.get_by_name("Contoso")
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.pk, self.customer.pk)
+
     def test_get_by_name_missing(self) -> None:
         self.assertIsNone(self.service.get_by_name("Missing Co"))
 

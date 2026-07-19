@@ -5,7 +5,10 @@ Django settings for config project.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = "django-insecure-ve&%8jxfj##kvkbffpq24m%y#6v3go17ynp8bgrdgo&#zcu_z$"
 
@@ -133,8 +136,21 @@ CORS_ALLOW_CREDENTIALS = True
 # LLM / agent
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 AGENT_MAX_TOOL_ROUNDS = int(os.environ.get("AGENT_MAX_TOOL_ROUNDS", "12"))
+
+# Redis memory / cache
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+REDIS_SESSION_TTL_SECONDS = int(os.environ.get("REDIS_SESSION_TTL_SECONDS", "3600"))
+REDIS_SESSION_MAX_TURNS = int(os.environ.get("REDIS_SESSION_MAX_TURNS", "40"))
+REDIS_CACHE_TTL_SECONDS = int(os.environ.get("REDIS_CACHE_TTL_SECONDS", "300"))
+REDIS_TOOL_TTL_SECONDS = int(os.environ.get("REDIS_TOOL_TTL_SECONDS", "120"))
+REDIS_TRACE_TTL_SECONDS = int(os.environ.get("REDIS_TRACE_TTL_SECONDS", "86400"))
+OBSERVABILITY_WRITE_FILES = os.environ.get("OBSERVABILITY_WRITE_FILES", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}

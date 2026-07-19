@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from core.permissions import can_view_all_issues
 from core.services.keycloak_auth_service import KeycloakUser
@@ -46,10 +46,24 @@ class IssueService:
         customer_name: str,
         user: KeycloakUser | None = None,
     ) -> list[dict[str, Any]]:
-        qs = Issue.objects.select_related("customer").filter(
-            customer__name__iexact=customer_name.strip(),
-            status__in=self.OPEN_STATUSES,
-        )
+        from issues.services.customer_service import CustomerService
+
+        name = customer_name.strip()
+        customer = CustomerService().get_by_name(name)
+        if customer:
+            qs = Issue.objects.select_related("customer").filter(
+                customer=customer,
+                status__in=self.OPEN_STATUSES,
+            )
+        else:
+            # Keyword fallback: title/description match (e.g. "Client X")
+            qs = Issue.objects.select_related("customer").filter(
+                status__in=self.OPEN_STATUSES,
+            ).filter(
+                Q(title__icontains=name)
+                | Q(description__icontains=name)
+                | Q(customer__name__icontains=name)
+            )
         if user and not can_view_all_issues(user):
             qs = qs.filter(assigned_to__iexact=user.username)
         return [self.to_dict(issue) for issue in qs]

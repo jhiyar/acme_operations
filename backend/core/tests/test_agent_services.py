@@ -165,6 +165,8 @@ class ChatServiceTests(TestCase):
         self.assertEqual(reply.role, "admin")
         self.assertEqual(reply.tool_trace[0]["tool"], "get_customer_profile")
         fake_agent.run.assert_called_once()
+        self.assertIsNotNone(reply.trace_id)
+        self.assertIsNotNone(reply.latency_ms)
 
 
 class LlmClientFormattingTests(SimpleTestCase):

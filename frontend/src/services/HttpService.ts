@@ -16,6 +16,7 @@ class HttpService {
     this.client = axios.create({
       baseURL,
       headers: { "Content-Type": "application/json" },
+      timeout: 120_000,
     });
 
     this.client.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {

@@ -13,12 +13,22 @@ from pydantic import BaseModel, Field
 from core.services.agent_tool_service import AgentToolService
 from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm import get_chat_model
+from core.services.memory_service import MemoryService
+from core.skills import CustomerEscalationSummarySkill
 
 AGENT_SYSTEM_PROMPT = """You are Acme Operations assistant.
 Use tools to look up customers and issues. Never invent customer names, issue IDs, or facts.
 If the user asks multiple things, call as many tools as needed and answer every part in your final reply.
 For recommended next actions, call create_next_action (it generates and persists the recommendation).
+For executive escalation briefs (risk, summary, missing info), call customer_escalation_summary.
 If a tool returns an error (including RBAC), explain it clearly to the user.
+
+Customer names may be partial (e.g. "Contoso" for "Contoso Ltd") — still call the tools.
+If the user mentions a nickname or symptom (e.g. "Client X warehouse", "tracking is broken")
+rather than a formal customer name, call get_open_issues_for_customer with that phrase so the
+tool can keyword-match open issues. Do not assume the nickname is a customer record.
+When a tool returns candidates or keyword matches, use those results instead of asking the user
+to guess names.
 """
 
 
@@ -43,9 +53,13 @@ class AgentService:
         self,
         tools: AgentToolService | None = None,
         chat_model: Any | None = None,
+        memory: MemoryService | None = None,
+        skill: CustomerEscalationSummarySkill | None = None,
     ) -> None:
         self.tools = tools or AgentToolService()
         self._chat_model = chat_model
+        self.memory = memory or MemoryService()
+        self.skill = skill or CustomerEscalationSummarySkill(tools=self.tools)
 
     @property
     def chat_model(self) -> Any:
@@ -53,25 +67,51 @@ class AgentService:
             self._chat_model = get_chat_model()
         return self._chat_model
 
-    def run(self, message: str, user: KeycloakUser) -> AgentReply:
+    def run(
+        self,
+        message: str,
+        user: KeycloakUser,
+        *,
+        session_id: str | None = None,
+    ) -> AgentReply:
         structured_tools = self._build_tools(user)
+        history = self.memory.get_history(user.sub, session_id=session_id, limit=8)
+        messages: list[Any] = []
+        for turn in history:
+            role = turn.get("role")
+            content = turn.get("content") or ""
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+        messages.append(HumanMessage(content=message))
+
         agent = create_react_agent(
             self.chat_model,
             structured_tools,
             prompt=AGENT_SYSTEM_PROMPT,
         )
         result = agent.invoke(
-            {"messages": [HumanMessage(content=message)]},
+            {"messages": messages},
             config={"recursion_limit": settings.AGENT_MAX_TOOL_ROUNDS * 2},
         )
-        messages = result.get("messages") or []
-        return AgentReply(
-            reply=self._extract_reply(messages),
-            tool_trace=self._extract_tool_trace(messages),
+        result_messages = result.get("messages") or []
+        reply = self._extract_reply(result_messages)
+        tool_trace = self._extract_tool_trace(result_messages)
+
+        self.memory.append_turn(user.sub, "user", message, session_id=session_id)
+        self.memory.append_turn(
+            user.sub,
+            "assistant",
+            reply,
+            session_id=session_id,
+            tool_trace=tool_trace,
         )
+        return AgentReply(reply=reply, tool_trace=tool_trace)
 
     def _build_tools(self, user: KeycloakUser) -> list[StructuredTool]:
         service = self.tools
+        skill = self.skill
 
         def get_customer_profile(customer_name: str) -> str:
             return json.dumps(
@@ -97,6 +137,9 @@ class AgentService:
                 default=str,
             )
 
+        def customer_escalation_summary(customer_name: str) -> str:
+            return json.dumps(skill.run(customer_name, user), default=str)
+
         return [
             StructuredTool.from_function(
                 func=get_customer_profile,
@@ -107,7 +150,11 @@ class AgentService:
             StructuredTool.from_function(
                 func=get_open_issues_for_customer,
                 name="get_open_issues_for_customer",
-                description="Retrieve all open issues for a given customer",
+                description=(
+                    "Retrieve open issues for a customer name, or keyword-match open "
+                    "issues when the phrase is not an exact customer "
+                    "(e.g. Client X, warehouse tracking)"
+                ),
                 args_schema=CustomerNameArgs,
             ),
             StructuredTool.from_function(
@@ -127,6 +174,12 @@ class AgentService:
                     "and persist it. Only support_user or admin may succeed."
                 ),
                 args_schema=IssueIdArgs,
+            ),
+            StructuredTool.from_function(
+                func=customer_escalation_summary,
+                name="customer_escalation_summary",
+                description=CustomerEscalationSummarySkill.description,
+                args_schema=CustomerNameArgs,
             ),
         ]
 

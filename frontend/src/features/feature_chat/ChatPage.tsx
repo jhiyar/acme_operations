@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -11,10 +12,34 @@ import {
 type ChatResponse = {
   reply: string;
   role: string;
+  tool_trace?: Array<{
+    tool?: string;
+    args?: Record<string, unknown>;
+    result?: unknown;
+  }>;
 };
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function errorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (err.code === "ECONNABORTED") {
+      return "The assistant timed out — try a shorter question.";
+    }
+    if (err.message) {
+      return err.message;
+    }
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return "Unable to reach the assistant";
 }
 
 export function ChatPage() {
@@ -26,20 +51,24 @@ export function ChatPage() {
     mutationFn: (message: string) =>
       httpService.post<ChatResponse>("/chat/", { message }),
     onSuccess: (data) => {
-      setMessages((prev) => [
-        ...prev,
-        { id: createId(), role: "assistant", content: data.reply },
-      ]);
-    },
-    onError: (err) => {
-      const detail =
-        err instanceof Error ? err.message : "Unable to reach the assistant";
+      const tools = data.tool_trace?.map((step) => step.tool).filter(Boolean);
       setMessages((prev) => [
         ...prev,
         {
           id: createId(),
           role: "assistant",
-          content: `Something went wrong: ${detail}`,
+          content: data.reply,
+          toolsUsed: tools?.length ? (tools as string[]) : undefined,
+        },
+      ]);
+    },
+    onError: (err) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createId(),
+          role: "assistant",
+          content: `Something went wrong: ${errorMessage(err)}`,
         },
       ]);
     },

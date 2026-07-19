@@ -2,6 +2,7 @@ export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  toolsUsed?: string[];
 };
 
 type ChatMessageListProps = {
@@ -14,7 +15,8 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div className="chat-empty">
         <p>Ask a question to get started.</p>
         <p className="muted">
-          Example: “Show me open issues for Client X and suggest the next action.”
+          Example: “For Contoso’s production-line alert noise issue: summarise the
+          history and recommend a next action. Also list Contoso’s open issues.”
         </p>
       </div>
     );
@@ -30,7 +32,12 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           <span className="bubble-label">
             {message.role === "user" ? "You" : "Assistant"}
           </span>
-          <p>{message.content}</p>
+          <p className="bubble-body">{message.content}</p>
+          {message.toolsUsed?.length ? (
+            <p className="bubble-tools muted">
+              Tools: {message.toolsUsed.join(" → ")}
+            </p>
+          ) : null}
         </article>
       ))}
     </div>

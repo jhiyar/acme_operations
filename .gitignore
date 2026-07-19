@@ -12,6 +12,8 @@ backend/**/__pycache__/
 backend/**/*.py[cod]
 backend/db.sqlite3
 backend/*.sqlite3
+backend/evals/results/
+backend/evals/traces/
 
 # Frontend
 frontend/node_modules/

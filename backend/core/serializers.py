@@ -3,6 +3,12 @@ from rest_framework import serializers
 
 class ChatRequestSerializer(serializers.Serializer):
     message = serializers.CharField(trim_whitespace=True)
+    session_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="default",
+    )
 
     def validate_message(self, value: str) -> str:
         if not value:
