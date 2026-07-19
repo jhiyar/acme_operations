@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from core.services.agent_service import AgentService
@@ -34,8 +34,9 @@ class FakeLlm(LlmClient):
         messages: list[LlmMessage],
         *,
         system: str | None = None,
+        purpose: str = "complete",
     ) -> LlmResponse:
-        self.calls.append((messages, system))
+        self.calls.append((messages, system, purpose))
         return LlmResponse(text=self.text)
 
 
@@ -170,7 +171,8 @@ class ChatServiceTests(TestCase):
         self.assertIsNotNone(reply.latency_ms)
 
 
-class LlmClientFormattingTests(SimpleTestCase):
+class LlmClientFormattingTests(TestCase):
+    databases = {"default"}
     def test_anthropic_complete_formats_messages(self) -> None:
         fake_client = MagicMock()
         text_block = MagicMock()

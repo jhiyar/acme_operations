@@ -418,6 +418,232 @@ h1 {
   color: var(--ink);
 }
 
+.bubble-tools {
+  margin-top: 0.45rem !important;
+  font-size: 0.78rem;
+}
+
+.observability-page {
+  min-height: 100vh;
+}
+
+.observability-content {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.observability-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.run-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.run-row {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 247, 0.85);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.run-row:hover,
+.run-row.is-active {
+  border-color: rgba(46, 92, 70, 0.35);
+  background: rgba(46, 92, 70, 0.06);
+}
+
+.run-row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.run-row-message {
+  margin: 0.4rem 0 0.25rem;
+  font-size: 0.92rem;
+}
+
+.run-row-meta {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.run-detail-card h2,
+.run-detail-card h3 {
+  margin: 0 0 0.45rem;
+  font-family: var(--display);
+}
+
+.run-detail-card h3 {
+  margin-top: 1rem;
+  font-size: 1rem;
+}
+
+.run-pre {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(28, 45, 38, 0.04);
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.82rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.run-pre.compact {
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+.expandable-block {
+  margin: 0;
+}
+
+.expandable-body {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(28, 45, 38, 0.04);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.expandable-body.is-collapsed {
+  position: relative;
+}
+
+.expandable-body.is-collapsed::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.5rem;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 252, 247, 0),
+    rgba(246, 244, 239, 0.95)
+  );
+  pointer-events: none;
+}
+
+.run-markdown.compact .expandable-body {
+  padding: 0.55rem 0.7rem;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.btn-link-more {
+  margin-top: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link-more:hover {
+  color: var(--ink);
+}
+
+.pretty-json {
+  margin-top: 0.45rem;
+}
+
+.pretty-json.compact {
+  margin-top: 0.35rem;
+}
+
+.pretty-json-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pretty-json-body {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(28, 45, 38, 0.045);
+  border: 1px solid var(--line);
+  overflow: auto;
+  max-width: 100%;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pretty-json-body.is-collapsed {
+  position: relative;
+  overflow: hidden;
+}
+
+.pretty-json-body.is-collapsed::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.25rem;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 252, 247, 0),
+    rgba(246, 244, 239, 0.95)
+  );
+  pointer-events: none;
+}
+
+.pretty-json-body .json-key {
+  color: #2f5d49;
+  font-weight: 600;
+}
+
+.pretty-json-body .json-string {
+  color: #6b4f2a;
+}
+
+.pretty-json-body .json-number {
+  color: #2f4f7a;
+}
+
+.pretty-json-body .json-literal {
+  color: #7a3e4a;
+}
+
+.run-sublist {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+@media (max-width: 900px) {
+  .observability-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Chat */
 .chat-page {
   min-height: 100vh;
@@ -766,9 +992,117 @@ h1 {
   animation: rise 0.35s ease both;
 }
 
-.chat-bubble p {
+.bubble-body-plain {
   margin: 0.35rem 0 0;
   white-space: pre-wrap;
+}
+
+.markdown.bubble-body {
+  margin-top: 0.35rem;
+}
+
+.markdown {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote,
+.markdown table {
+  margin: 0.55rem 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 0.85rem 0 0.35rem;
+  font-family: var(--display);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown h1 {
+  font-size: 1.2rem;
+}
+
+.markdown h2 {
+  font-size: 1.1rem;
+}
+
+.markdown h3,
+.markdown h4 {
+  font-size: 1rem;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.25rem;
+}
+
+.markdown li + li {
+  margin-top: 0.2rem;
+}
+
+.markdown strong {
+  font-weight: 650;
+}
+
+.markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: rgba(20, 32, 24, 0.08);
+}
+
+.markdown pre {
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(20, 32, 24, 0.07);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown blockquote {
+  margin-left: 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid rgba(20, 32, 24, 0.18);
+  opacity: 0.9;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid rgba(20, 32, 24, 0.12);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
 }
 
 .bubble-label {
@@ -905,7 +1239,8 @@ h1 {
 
   .chat-stage,
   .chat-composer,
-  .issues-content {
+  .issues-content,
+  .observability-content {
     width: min(100% - 1.25rem, 880px);
   }
 }

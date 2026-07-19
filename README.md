@@ -61,10 +61,12 @@ The **Customer Escalation Summary** skill returns executive summary, risk level,
 
 | Store | Holds |
 |-------|--------|
-| **Postgres** | Durable customers, issues, updates, next actions (source of truth) |
-| **Redis** | Conversation turns, cached customer lookups, request/tool traces (ephemeral) |
+| **Postgres** | Durable customers, issues, chat conversations/messages, agent-run traces (source of truth) |
+| **Redis** | Warm session cache, customer/tool caches, short-TTL debug traces |
 
-Trade-off: Redis improves latency and multi-turn chat; losing Redis does not lose operational data (agent degrades gracefully).
+Chat agent context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from Postgres, with each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200) so long replies don’t blow the prompt. Redis is rehydrated from Postgres when empty; if Redis is down, multi-turn chat still works via Postgres.
+
+Trade-off: older turns outside the window are not sent to the model (unless you later add a rolling summary). Losing Redis does not lose operational or chat data.
 
 ## Agent tools
 
@@ -80,6 +82,9 @@ Trade-off: Redis improves latency and multi-turn chat; losing Redis does not los
 cd backend
 python manage.py eval_agent --provider anthropic
 # Results: backend/evals/results/latest.json + latest.md
+
+# DeepEval (LLM-as-judge on stored AgentRun replies)
+python manage.py eval_deepeval
 ```
 
 Eval checks: tool selection, grounding keywords, RBAC, next-action / skill behaviour.
@@ -87,8 +92,10 @@ Eval checks: tool selection, grounding keywords, RBAC, next-action / skill behav
 Observability on each `/api/chat/` request:
 
 - `tool_trace` in the response
-- `trace_id` + `latency_ms`
-- Structured logs (`acme.observability`)
+- `trace_id` + `latency_ms` + token totals
+- Durable Postgres rows: `AgentRun`, `LlmCall`, `ToolCall`
+- Admin UI at `/observability` (admin role)
+- Structured logs (`acme.llm`, `acme.observability`)
 - Trace JSON under `backend/evals/traces/` (and Redis when available)
 
 Manual live smoke:

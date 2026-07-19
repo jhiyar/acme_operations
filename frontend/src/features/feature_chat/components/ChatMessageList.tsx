@@ -1,3 +1,5 @@
+import { Markdown } from "../../../widgets/Markdown";
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -32,7 +34,11 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           <span className="bubble-label">
             {message.role === "user" ? "You" : "Assistant"}
           </span>
-          <p className="bubble-body">{message.content}</p>
+          {message.role === "assistant" ? (
+            <Markdown className="bubble-body">{message.content}</Markdown>
+          ) : (
+            <p className="bubble-body bubble-body-plain">{message.content}</p>
+          )}
           {message.toolsUsed?.length ? (
             <p className="bubble-tools muted">
               Tools: {message.toolsUsed.join(" → ")}

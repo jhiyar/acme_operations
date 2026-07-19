@@ -15,6 +15,12 @@ class LlmMessage:
 class LlmResponse:
     text: str
     raw: dict[str, Any] = field(default_factory=dict)
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    latency_ms: int | None = None
+    model: str = ""
+    provider: str = ""
 
 
 class LlmClient(ABC):
@@ -26,5 +32,6 @@ class LlmClient(ABC):
         messages: list[LlmMessage],
         *,
         system: str | None = None,
+        purpose: str = "complete",
     ) -> LlmResponse:
         ...

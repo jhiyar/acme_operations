@@ -1,6 +1,8 @@
 from django.urls import include, path
 
 from core.views import (
+    AgentRunDetailView,
+    AgentRunListView,
     AgentToolCallView,
     AgentToolsView,
     ChatView,
@@ -23,6 +25,12 @@ urlpatterns = [
         "conversations/<uuid:conversation_id>/",
         ConversationDetailView.as_view(),
         name="conversation-detail",
+    ),
+    path("admin/runs/", AgentRunListView.as_view(), name="admin-runs"),
+    path(
+        "admin/runs/<uuid:run_id>/",
+        AgentRunDetailView.as_view(),
+        name="admin-run-detail",
     ),
     path("agent/tools/", AgentToolsView.as_view(), name="agent-tools"),
     path("agent/tools/call/", AgentToolCallView.as_view(), name="agent-tool-call"),

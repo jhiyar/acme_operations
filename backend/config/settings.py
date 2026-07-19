@@ -141,6 +141,12 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 AGENT_MAX_TOOL_ROUNDS = int(os.environ.get("AGENT_MAX_TOOL_ROUNDS", "12"))
+# How many prior turns to send to the model (sliding window).
+AGENT_HISTORY_MAX_TURNS = int(os.environ.get("AGENT_HISTORY_MAX_TURNS", "8"))
+# Cap each prior turn so long assistant markdown doesn't explode the context.
+AGENT_HISTORY_MAX_CHARS_PER_TURN = int(
+    os.environ.get("AGENT_HISTORY_MAX_CHARS_PER_TURN", "1200")
+)
 
 # Redis memory / cache
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

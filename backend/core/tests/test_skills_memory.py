@@ -30,6 +30,7 @@ class FakeLlm(LlmClient):
         messages: list[LlmMessage],
         *,
         system: str | None = None,
+        purpose: str = "complete",
     ) -> LlmResponse:
         return LlmResponse(text=self.text)
 

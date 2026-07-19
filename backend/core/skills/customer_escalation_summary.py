@@ -92,6 +92,7 @@ class CustomerEscalationSummarySkill:
         llm_response = self.llm.complete(
             [LlmMessage(role="user", content=json.dumps(payload, default=str))],
             system=ESCALATION_SYSTEM,
+            purpose="customer_escalation_summary",
         )
         structured = self._parse_json(llm_response.text)
 

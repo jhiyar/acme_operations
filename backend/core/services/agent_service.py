@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from django.conf import settings
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -11,10 +13,14 @@ from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
 
 from core.services.agent_tool_service import AgentToolService
+from core.services.conversation_service import ConversationService
 from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm import get_chat_model
+from core.services.llm_logging import record_llm_call, usage_from_ai_message
 from core.services.memory_service import MemoryService
 from core.skills import CustomerEscalationSummarySkill
+
+logger = logging.getLogger(__name__)
 
 AGENT_SYSTEM_PROMPT = """You are Acme Operations assistant.
 Use tools to look up customers and issues. Never invent customer names, issue IDs, or facts.
@@ -44,6 +50,27 @@ class IssueIdArgs(BaseModel):
 class AgentReply:
     reply: str
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+
+
+def _is_uuid(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        UUID(str(value))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _truncate_turn(content: str, limit: int) -> str:
+    text = (content or "").strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}…"
 
 
 class AgentService:
@@ -55,11 +82,13 @@ class AgentService:
         chat_model: Any | None = None,
         memory: MemoryService | None = None,
         skill: CustomerEscalationSummarySkill | None = None,
+        conversations: ConversationService | None = None,
     ) -> None:
         self.tools = tools or AgentToolService()
         self._chat_model = chat_model
         self.memory = memory or MemoryService()
         self.skill = skill or CustomerEscalationSummarySkill(tools=self.tools)
+        self.conversations = conversations or ConversationService()
 
     @property
     def chat_model(self) -> Any:
@@ -75,7 +104,7 @@ class AgentService:
         session_id: str | None = None,
     ) -> AgentReply:
         structured_tools = self._build_tools(user)
-        history = self.memory.get_history(user.sub, session_id=session_id, limit=8)
+        history = self._load_history(user.sub, session_id=session_id)
         messages: list[Any] = []
         for turn in history:
             role = turn.get("role")
@@ -98,7 +127,9 @@ class AgentService:
         result_messages = result.get("messages") or []
         reply = self._extract_reply(result_messages)
         tool_trace = self._extract_tool_trace(result_messages)
+        usage = self._record_agent_llm_usage(result_messages)
 
+        # Keep Redis warm for low-latency follow-ups / eval harness.
         self.memory.append_turn(user.sub, "user", message, session_id=session_id)
         self.memory.append_turn(
             user.sub,
@@ -107,7 +138,73 @@ class AgentService:
             session_id=session_id,
             tool_trace=tool_trace,
         )
-        return AgentReply(reply=reply, tool_trace=tool_trace)
+        return AgentReply(
+            reply=reply,
+            tool_trace=tool_trace,
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            total_tokens=usage["total_tokens"],
+            llm_call_count=usage["llm_call_count"],
+        )
+
+    def _load_history(
+        self,
+        user_sub: str,
+        *,
+        session_id: str | None,
+    ) -> list[dict[str, str]]:
+        """
+        Sliding-window history for the model.
+
+        Chat conversations (UUID session_id) use Postgres as source of truth so
+        Redis TTL / outages do not wipe multi-turn context. Redis is still used
+        for non-conversation sessions (e.g. eval) and as a warm cache write.
+        """
+        limit = max(1, int(getattr(settings, "AGENT_HISTORY_MAX_TURNS", 8)))
+        max_chars = max(
+            1,
+            int(getattr(settings, "AGENT_HISTORY_MAX_CHARS_PER_TURN", 1200)),
+        )
+        turns: list[dict[str, str]] = []
+
+        if _is_uuid(session_id):
+            try:
+                turns = self.conversations.recent_turns_for_agent(
+                    session_id,  # type: ignore[arg-type]
+                    limit=limit,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Postgres history unavailable: %s", exc)
+                turns = []
+
+        if not turns:
+            turns = [
+                {"role": str(t.get("role") or ""), "content": str(t.get("content") or "")}
+                for t in self.memory.get_history(user_sub, session_id=session_id, limit=limit)
+            ]
+
+        trimmed = [
+            {
+                "role": turn["role"],
+                "content": _truncate_turn(turn.get("content") or "", max_chars),
+            }
+            for turn in turns
+            if turn.get("role") in {"user", "assistant"} and (turn.get("content") or "").strip()
+        ]
+
+        # Rehydrate Redis from durable history so a cold cache warms quickly.
+        if _is_uuid(session_id) and trimmed and self.memory.enabled:
+            existing = self.memory.get_history(user_sub, session_id=session_id, limit=limit)
+            if not existing:
+                for turn in trimmed:
+                    self.memory.append_turn(
+                        user_sub,
+                        turn["role"],
+                        turn["content"],
+                        session_id=session_id,
+                    )
+
+        return trimmed
 
     def _build_tools(self, user: KeycloakUser) -> list[StructuredTool]:
         service = self.tools
@@ -228,3 +325,52 @@ class AgentService:
                         }
                     )
         return trace
+
+    def _record_agent_llm_usage(self, messages: list[Any]) -> dict[str, int]:
+        provider = (settings.LLM_PROVIDER or "").strip().lower()
+        model = (
+            settings.ANTHROPIC_MODEL
+            if provider == "anthropic"
+            else settings.OPENAI_MODEL
+        )
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        llm_call_count = 0
+
+        for message in messages:
+            if not isinstance(message, AIMessage):
+                continue
+            prompt, completion, total = usage_from_ai_message(message)
+            if prompt == 0 and completion == 0 and total == 0:
+                # Still count an agent model step when usage metadata is missing.
+                if message.content or message.tool_calls:
+                    llm_call_count += 1
+                    record_llm_call(
+                        provider=provider or "unknown",
+                        model=model,
+                        purpose="agent",
+                    )
+                continue
+            prompt_tokens += prompt
+            completion_tokens += completion
+            total_tokens += total
+            llm_call_count += 1
+            record_llm_call(
+                provider=provider or "unknown",
+                model=model,
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                total_tokens=total,
+                purpose="agent",
+                request_id=str(
+                    (getattr(message, "response_metadata", None) or {}).get("id") or ""
+                ),
+            )
+
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "llm_call_count": llm_call_count,
+        }

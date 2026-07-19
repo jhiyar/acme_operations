@@ -5,12 +5,14 @@ from rest_framework.response import Response
 
 from core.authentication import (
     CanUseAssistant,
+    IsAdmin,
     IsAuthenticatedKeycloak,
     KeycloakJWTAuthentication,
 )
-from core.models import Conversation
+from core.models import AgentRun, Conversation
 from core.serializers import AgentToolCallSerializer, ChatRequestSerializer
 from core.services import AgentToolService, ChatService, HealthService, KeycloakAuthService
+from core.services.agent_run_service import AgentRunService
 from core.services.conversation_service import ConversationService
 
 
@@ -128,8 +130,44 @@ class ChatView(generics.GenericAPIView):
                 "tool_trace": result.tool_trace,
                 "trace_id": result.trace_id,
                 "latency_ms": result.latency_ms,
+                "run_id": result.run_id,
+                "prompt_tokens": result.prompt_tokens,
+                "completion_tokens": result.completion_tokens,
+                "total_tokens": result.total_tokens,
             }
         )
+
+
+class AgentRunListView(generics.GenericAPIView):
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, IsAdmin]
+
+    def get(self, request: Request) -> Response:
+        try:
+            limit = int(request.query_params.get("limit", 50))
+        except (TypeError, ValueError):
+            limit = 50
+        service = AgentRunService()
+        runs = service.list_runs(limit=limit)
+        return Response(
+            {
+                "count": len(runs),
+                "runs": [service.to_summary(run) for run in runs],
+            }
+        )
+
+
+class AgentRunDetailView(generics.GenericAPIView):
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, IsAdmin]
+
+    def get(self, request: Request, run_id) -> Response:
+        service = AgentRunService()
+        try:
+            run = service.get_run(run_id)
+        except AgentRun.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(service.to_detail(run))
 
 
 class AgentToolsView(generics.GenericAPIView):
@@ -140,7 +178,6 @@ class AgentToolsView(generics.GenericAPIView):
 
     def get(self, request: Request) -> Response:
         return Response({"tools": AgentToolService().tool_specs()})
-
 
 class AgentToolCallView(generics.GenericAPIView):
     """

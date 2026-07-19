@@ -5,7 +5,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
 
-from core.permissions import ASSISTANT_ROLES, can_use_assistant
+from core.permissions import ASSISTANT_ROLES, can_use_assistant, is_admin
 from core.services.keycloak_auth_service import KeycloakAuthService
 
 
@@ -51,6 +51,11 @@ class HasRealmRole(BasePermission):
 class CanUseAssistant(BasePermission):
     def has_permission(self, request, view):
         return can_use_assistant(request.user)
+
+
+class IsAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return is_admin(request.user)
 
 
 def keycloak_settings():

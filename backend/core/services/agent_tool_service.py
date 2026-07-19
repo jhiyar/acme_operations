@@ -130,6 +130,7 @@ class AgentToolService:
         response = self.llm.complete(
             [LlmMessage(role="user", content=json.dumps(context, default=str))],
             system=SUMMARISE_SYSTEM,
+            purpose="summarise_issue_history",
         )
         return {
             "found": True,
@@ -158,6 +159,7 @@ class AgentToolService:
         response = self.llm.complete(
             [LlmMessage(role="user", content=json.dumps(context, default=str))],
             system=RECOMMEND_SYSTEM,
+            purpose="create_next_action",
         )
         text = response.text.strip()
         if not text:

@@ -93,3 +93,17 @@ class ConversationService:
             **self.to_summary(conversation),
             "messages": messages,
         }
+
+    def recent_turns_for_agent(
+        self,
+        conversation_id: UUID | str,
+        *,
+        limit: int = 8,
+    ) -> list[dict[str, str]]:
+        """Durable history used as the agent context source of truth."""
+        rows = list(
+            Message.objects.filter(conversation_id=conversation_id)
+            .order_by("-created_at")[: max(1, limit)]
+        )
+        rows.reverse()
+        return [{"role": row.role, "content": row.content} for row in rows]

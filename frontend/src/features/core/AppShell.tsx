@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { Button } from "../../widgets/Button";
@@ -6,13 +6,21 @@ import { useAuth } from "./AuthProvider";
 
 const SIDEBAR_KEY = "acme.sidebar.collapsed";
 
-const NAV_ITEMS = [
+const BASE_NAV = [
   { to: "/chat", label: "Assistant", short: "A" },
   { to: "/issues", label: "Issues", short: "I" },
 ] as const;
 
 export function AppShell() {
   const { user, logout } = useAuth();
+  const isAdmin = user?.roles.includes("admin") ?? false;
+  const navItems = useMemo(
+    () =>
+      isAdmin
+        ? [...BASE_NAV, { to: "/observability", label: "Observability", short: "O" }]
+        : [...BASE_NAV],
+    [isAdmin],
+  );
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_KEY) === "1";
@@ -54,7 +62,7 @@ export function AppShell() {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
