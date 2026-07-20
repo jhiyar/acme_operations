@@ -24,6 +24,11 @@ def can_manage_issues(user: KeycloakUser | None) -> bool:
     return is_admin(user)
 
 
+def can_manage_customers(user: KeycloakUser | None) -> bool:
+    """Create / update / delete customer profiles — admin only."""
+    return is_admin(user)
+
+
 def can_create_next_action(user: KeycloakUser | None) -> bool:
     """Same gate as workflow updates: support + admin."""
     return can_update_issues(user)
@@ -41,3 +46,10 @@ class CanManageIssues(BasePermission):
 
     def has_permission(self, request, view):
         return can_manage_issues(request.user)
+
+
+class CanManageCustomers(BasePermission):
+    """admin may create, edit, and delete customers."""
+
+    def has_permission(self, request, view):
+        return can_manage_customers(request.user)

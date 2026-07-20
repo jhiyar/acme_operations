@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 
 import { Button } from "../../../widgets/Button";
 import { TextField } from "../../../widgets/TextField";
-import { useCustomers } from "../hooks/useCustomers";
+import { useCustomers } from "../../feature_customers/hooks/useCustomers";
 import {
   useCreateIssue,
   useUpdateIssue,

@@ -60,6 +60,31 @@ class CustomerSerializer(serializers.ModelSerializer):
         )
 
 
+class CustomerWriteSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    industry = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
+    tier = serializers.CharField(required=False, allow_blank=True, default="standard", max_length=40)
+    account_owner = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=120
+    )
+    contact_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class CustomerPatchSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    industry = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    tier = serializers.CharField(required=False, allow_blank=True, max_length=40)
+    account_owner = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    contact_email = serializers.EmailField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs:
+            raise serializers.ValidationError("Provide at least one updatable field")
+        return attrs
+
+
 class IssuePatchSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
         choices=Issue.Status.choices,

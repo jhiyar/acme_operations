@@ -6,6 +6,7 @@ import { RequireAdmin } from "../features/core/RequireAdmin";
 import { RequireAuth } from "../features/core/RequireAuth";
 import { LoginPage } from "../features/feature_auth/LoginPage";
 import { ChatPage } from "../features/feature_chat/ChatPage";
+import { CustomersPage } from "../features/feature_customers/CustomersPage";
 import { IssuesPage } from "../features/feature_issues/IssuesPage";
 import { ObservabilityPage } from "../features/feature_observability/ObservabilityPage";
 
@@ -17,6 +18,7 @@ export function MainRoutes() {
         <Route element={<AppShell />}>
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/issues" element={<IssuesPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
           <Route element={<RequireAdmin />}>
             <Route path="/observability" element={<ObservabilityPage />} />
           </Route>

@@ -122,3 +122,50 @@ class IssueApiRbacTests(APITestCase):
             response.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+
+class CustomerApiRbacTests(APITestCase):
+    def setUp(self) -> None:
+        self.customer = Customer.objects.create(name="Fabrikam")
+        self.admin = make_user("admin", "admin")
+        self.support = make_user("support", "support_user")
+
+    def test_assistant_can_list(self) -> None:
+        self.client.force_authenticate(user=self.support)
+        response = self.client.get("/api/customers/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_support_cannot_create(self) -> None:
+        self.client.force_authenticate(user=self.support)
+        response = self.client.post(
+            "/api/customers/",
+            {"name": "Blocked"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_crud(self) -> None:
+        self.client.force_authenticate(user=self.admin)
+        created = self.client.post(
+            "/api/customers/",
+            {
+                "name": "Adventure Works",
+                "industry": "Retail",
+                "tier": "premium",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        customer_id = created.data["customer"]["id"]
+
+        patched = self.client.patch(
+            f"/api/customers/{customer_id}/",
+            {"notes": "Strategic account"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["customer"]["notes"], "Strategic account")
+
+        deleted = self.client.delete(f"/api/customers/{customer_id}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)

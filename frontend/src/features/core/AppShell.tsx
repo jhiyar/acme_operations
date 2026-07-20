@@ -9,6 +9,7 @@ const SIDEBAR_KEY = "acme.sidebar.collapsed";
 const BASE_NAV = [
   { to: "/chat", label: "Assistant", short: "A" },
   { to: "/issues", label: "Issues", short: "I" },
+  { to: "/customers", label: "Customers", short: "C" },
 ] as const;
 
 export function AppShell() {

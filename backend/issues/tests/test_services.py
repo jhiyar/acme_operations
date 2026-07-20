@@ -48,6 +48,46 @@ class CustomerServiceTests(TestCase):
         self.assertEqual(data["name"], "Contoso Ltd")
         self.assertEqual(data["tier"], "premium")
 
+    def test_admin_can_create_update_delete(self) -> None:
+        admin = make_user("admin", "admin")
+        created = self.service.create_customer(
+            admin,
+            name="Northwind",
+            industry="Trading",
+            tier="standard",
+        )
+        self.assertTrue(created["created"])
+        customer_id = created["customer"]["id"]
+
+        updated = self.service.update_customer(
+            admin,
+            customer_id,
+            tier="premium",
+            notes="VIP",
+        )
+        self.assertTrue(updated["updated"])
+        self.assertEqual(updated["customer"]["tier"], "premium")
+
+        deleted = self.service.delete_customer(admin, customer_id)
+        self.assertTrue(deleted["deleted"])
+        self.assertFalse(Customer.objects.filter(pk=customer_id).exists())
+
+    def test_cannot_delete_customer_with_issues(self) -> None:
+        admin = make_user("admin", "admin")
+        Issue.objects.create(
+            customer=self.customer,
+            title="Open ticket",
+            assigned_to="support",
+        )
+        result = self.service.delete_customer(admin, self.customer.id)
+        self.assertFalse(result["deleted"])
+        self.assertTrue(Customer.objects.filter(pk=self.customer.id).exists())
+
+    def test_support_cannot_create_customer(self) -> None:
+        support = make_user("support", "support_user")
+        result = self.service.create_customer(support, name="Blocked Co")
+        self.assertFalse(result["created"])
+
 
 class IssueServiceTests(TestCase):
     def setUp(self) -> None:

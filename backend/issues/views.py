@@ -5,12 +5,15 @@ from rest_framework.response import Response
 from core.authentication import KeycloakJWTAuthentication
 from core.permissions import CanUseAssistant, IsAuthenticatedKeycloak
 from issues.permissions import (
+    CanManageCustomers,
     CanManageIssues,
     CanUpdateIssues,
     can_view_all_issues,
 )
 from issues.serializers import (
+    CustomerPatchSerializer,
     CustomerSerializer,
+    CustomerWriteSerializer,
     IssueDetailSerializer,
     IssuePatchSerializer,
     IssueSerializer,
@@ -142,10 +145,17 @@ class IssueUpdateCreateView(generics.GenericAPIView):
         return Response(result, status=status.HTTP_201_CREATED)
 
 
-class CustomerListView(generics.ListAPIView):
+class CustomerListCreateView(generics.ListCreateAPIView):
+    """List customers for assistant roles; admin may create via POST."""
+
     authentication_classes = [KeycloakJWTAuthentication]
-    permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant]
     serializer_class = CustomerSerializer
+
+    def get_permissions(self):
+        permissions = [IsAuthenticatedKeycloak(), CanUseAssistant()]
+        if self.request.method == "POST":
+            permissions.append(CanManageCustomers())
+        return permissions
 
     def get_queryset(self):
         return CustomerService().list_all()
@@ -154,3 +164,57 @@ class CustomerListView(generics.ListAPIView):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
         return Response({"count": len(serializer.data), "customers": serializer.data})
+
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        serializer = CustomerWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = CustomerService().create_customer(
+            request.user, **serializer.validated_data
+        )
+        if not result.get("created"):
+            return Response(
+                {"detail": result.get("error")},
+                status=_service_error_status(result),
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class CustomerDetailView(generics.RetrieveAPIView):
+    """Retrieve / patch / delete a customer (mutations are admin-only)."""
+
+    authentication_classes = [KeycloakJWTAuthentication]
+    serializer_class = CustomerSerializer
+    lookup_url_kwarg = "customer_id"
+
+    def get_permissions(self):
+        permissions = [IsAuthenticatedKeycloak(), CanUseAssistant()]
+        if self.request.method in ("PATCH", "PUT", "DELETE"):
+            permissions.append(CanManageCustomers())
+        return permissions
+
+    def get_queryset(self):
+        return CustomerService().list_all()
+
+    def patch(self, request: Request, customer_id: int) -> Response:
+        serializer = CustomerPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = CustomerService().update_customer(
+            request.user,
+            customer_id,
+            **serializer.validated_data,
+        )
+        if not result.get("updated"):
+            return Response(
+                {"detail": result.get("error")},
+                status=_service_error_status(result),
+            )
+        return Response(result)
+
+    def delete(self, request: Request, customer_id: int) -> Response:
+        result = CustomerService().delete_customer(request.user, customer_id)
+        if not result.get("deleted"):
+            return Response(
+                {"detail": result.get("error")},
+                status=_service_error_status(result),
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
