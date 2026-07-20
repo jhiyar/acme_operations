@@ -38,6 +38,7 @@ class FakeLlm(LlmClient):
 class MemoryServiceTests(SimpleTestCase):
     def test_append_and_history_with_fake_client(self) -> None:
         store: dict[str, list[str]] = {}
+        kv: dict[str, str] = {}
 
         class FakeRedis:
             def rpush(self, key, value):
@@ -61,9 +62,10 @@ class MemoryServiceTests(SimpleTestCase):
                 return True
 
             def get(self, key):
-                return None
+                return kv.get(key)
 
-            def setex(self, *args, **kwargs):
+            def setex(self, key, ttl, value):
+                kv[key] = value
                 return True
 
         memory = MemoryService(client=FakeRedis())  # type: ignore[arg-type]
@@ -72,6 +74,70 @@ class MemoryServiceTests(SimpleTestCase):
         history = memory.get_history("u1")
         self.assertEqual(len(history), 2)
         self.assertEqual(history[0]["role"], "user")
+
+        key = memory.tool_cache_key(customer_name="contoso", viewer="admin")
+        memory.cache_tool_result(
+            "get_open_issues_for_customer",
+            key,
+            {"found": True, "open_issue_count": 1},
+        )
+        cached = memory.get_cached_tool_result("get_open_issues_for_customer", key)
+        self.assertEqual(cached["open_issue_count"], 1)
+
+
+class OpenIssuesToolCacheTests(TestCase):
+    def setUp(self) -> None:
+        self.kv: dict[str, str] = {}
+
+        class FakeRedis:
+            def __init__(self, store: dict[str, str]) -> None:
+                self.store = store
+
+            def ping(self):
+                return True
+
+            def get(self, key):
+                return self.store.get(key)
+
+            def setex(self, key, ttl, value):
+                self.store[key] = value
+                return True
+
+            def rpush(self, *args, **kwargs):
+                return 0
+
+            def ltrim(self, *args, **kwargs):
+                return True
+
+            def expire(self, *args, **kwargs):
+                return True
+
+            def lrange(self, *args, **kwargs):
+                return []
+
+        self.memory = MemoryService(client=FakeRedis(self.kv))  # type: ignore[arg-type]
+        self.customer = Customer.objects.create(name="Contoso Ltd", tier="premium")
+        Issue.objects.create(
+            customer=self.customer,
+            title="Alert noise",
+            description="False positives",
+            status=Issue.Status.OPEN,
+            priority=Issue.Priority.CRITICAL,
+            assigned_to="support",
+        )
+
+    def test_get_open_issues_uses_redis_tool_cache(self) -> None:
+        from core.services.agent_tool_service import AgentToolService
+
+        service = AgentToolService(memory=self.memory)
+        user = make_user("admin", "admin")
+        first = service.get_open_issues_for_customer("Contoso Ltd", user=user)
+        second = service.get_open_issues_for_customer("Contoso Ltd", user=user)
+        self.assertTrue(first["found"])
+        self.assertNotIn("cache_hit", first)
+        self.assertTrue(second["cache_hit"])
+        self.assertEqual(second["open_issue_count"], first["open_issue_count"])
+        self.assertTrue(any(k.startswith("acme:tool:get_open_issues_for_customer:") for k in self.kv))
 
 
 class ObservabilityServiceTests(SimpleTestCase):

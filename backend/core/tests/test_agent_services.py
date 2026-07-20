@@ -12,7 +12,7 @@ from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm.anthropic_llm_service import AnthropicLlmService
 from core.services.llm.base import LlmClient, LlmMessage, LlmResponse
 from core.services.llm.openai_llm_service import OpenAiCompatibleLlmService
-from issues.models import Customer, Issue, IssueUpdate, NextAction
+from issues.models import Customer, Issue, IssueHistorySummary, IssueUpdate, NextAction
 
 
 def make_user(username: str, *roles: str) -> KeycloakUser:
@@ -79,7 +79,37 @@ class AgentToolServiceTests(TestCase):
         self.assertTrue(result["found"])
         self.assertEqual(result["summary"], "Concise summary of the issue.")
         self.assertEqual(len(self.llm.calls), 1)
+        self.assertFalse(result["cache_hit"])
+        self.assertEqual(result["source"], "llm")
         self.assertIn("Summarise", self.llm.calls[0][1] or "")
+        self.assertTrue(
+            IssueHistorySummary.objects.filter(issue=self.issue).exists()
+        )
+
+    def test_summarise_issue_history_reuses_postgres_summary(self) -> None:
+        user = make_user("support", "support_user")
+        first = self.service.summarise_issue_history(self.issue.id, user=user)
+        second = self.service.summarise_issue_history(self.issue.id, user=user)
+        self.assertEqual(len(self.llm.calls), 1)
+        self.assertFalse(first["cache_hit"])
+        self.assertTrue(second["cache_hit"])
+        self.assertEqual(second["source"], "postgres")
+        self.assertEqual(second["summary"], first["summary"])
+        self.assertEqual(IssueHistorySummary.objects.filter(issue=self.issue).count(), 1)
+
+    def test_summarise_issue_history_refreshes_after_timeline_change(self) -> None:
+        user = make_user("support", "support_user")
+        self.service.summarise_issue_history(self.issue.id, user=user)
+        IssueUpdate.objects.create(
+            issue=self.issue,
+            author="support",
+            body="Customer confirmed plant still noisy",
+        )
+        self.llm.text = "Updated summary after new note."
+        result = self.service.summarise_issue_history(self.issue.id, user=user)
+        self.assertEqual(len(self.llm.calls), 2)
+        self.assertFalse(result["cache_hit"])
+        self.assertEqual(result["summary"], "Updated summary after new note.")
 
     def test_create_next_action_persists_llm_recommendation(self) -> None:
         self.llm.text = "Schedule vendor bridge call this week."

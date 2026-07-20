@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from issues.models import Customer, Issue, IssueUpdate, NextAction
+from issues.models import Customer, Issue, IssueHistorySummary, IssueUpdate, NextAction
 
 
 @admin.register(Customer)
@@ -43,3 +43,9 @@ class IssueUpdateAdmin(admin.ModelAdmin):
 @admin.register(NextAction)
 class NextActionAdmin(admin.ModelAdmin):
     list_display = ("id", "issue", "status", "recommended_by", "created_at")
+
+
+@admin.register(IssueHistorySummary)
+class IssueHistorySummaryAdmin(admin.ModelAdmin):
+    list_display = ("id", "issue", "fingerprint", "updated_at")
+    search_fields = ("issue__title", "summary")

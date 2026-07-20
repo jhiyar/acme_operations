@@ -112,3 +112,28 @@ class NextAction(models.Model):
 
     def __str__(self) -> str:
         return f"Next action for issue #{self.issue_id}"
+
+
+class IssueHistorySummary(models.Model):
+    """
+    Durable LLM summary for an issue.
+
+    Fingerprint tracks issue fields + timeline so a new update or next action
+    forces a fresh summarise call instead of serving a stale brief.
+    """
+
+    issue = models.OneToOneField(
+        Issue,
+        on_delete=models.CASCADE,
+        related_name="history_summary",
+    )
+    summary = models.TextField()
+    fingerprint = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "core_issuehistorysummary"
+
+    def __str__(self) -> str:
+        return f"Summary for issue #{self.issue_id}"

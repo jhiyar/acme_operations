@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Callable
 
 from core.services.keycloak_auth_service import KeycloakUser
 from core.services.llm import get_llm_client
 from core.services.llm.base import LlmClient, LlmMessage
-from issues.models import Issue, IssueUpdate, NextAction
+from issues.models import Issue, IssueHistorySummary, IssueUpdate, NextAction
 from issues.permissions import can_create_next_action
 from issues.services.customer_service import CustomerService
 from issues.services.issue_service import IssueService
@@ -87,17 +88,29 @@ class AgentToolService:
         customer_name: str,
         user: KeycloakUser | None = None,
     ) -> dict[str, Any]:
+        # Include viewer identity — sales/support see assigned issues only.
+        cache_key = self.memory.tool_cache_key(
+            customer_name=customer_name.strip().lower(),
+            viewer=user.username if user else "anon",
+        )
+        cached = self.memory.get_cached_tool_result(
+            "get_open_issues_for_customer",
+            cache_key,
+        )
+        if cached is not None:
+            return {**cached, "cache_hit": True}
+
         customer = self.customers.get_by_name(customer_name)
         issues = self.issues.open_issues_for_customer(customer_name, user=user)
         if customer:
-            return {
+            result = {
                 "found": True,
                 "customer": self.customers.to_dict(customer),
                 "open_issue_count": len(issues),
                 "issues": issues,
             }
-        if issues:
-            return {
+        elif issues:
+            result = {
                 "found": True,
                 "matched_by": "keyword",
                 "query": customer_name,
@@ -108,13 +121,21 @@ class AgentToolService:
                     "description, or customer name contains the query."
                 ),
             }
-        matches = self.customers.find_matches(customer_name)
-        return {
-            "found": False,
-            "customer_name": customer_name,
-            "issues": [],
-            "candidates": [self.customers.to_dict(c) for c in matches],
-        }
+        else:
+            matches = self.customers.find_matches(customer_name)
+            result = {
+                "found": False,
+                "customer_name": customer_name,
+                "issues": [],
+                "candidates": [self.customers.to_dict(c) for c in matches],
+            }
+
+        self.memory.cache_tool_result(
+            "get_open_issues_for_customer",
+            cache_key,
+            result,
+        )
+        return result
 
     def summarise_issue_history(
         self,
@@ -127,10 +148,30 @@ class AgentToolService:
 
         context = self._issue_context(issue)
         timeline = context["timeline"]
+        fingerprint = self._summary_fingerprint(issue, context)
+        stored = IssueHistorySummary.objects.filter(issue=issue).first()
+        if stored and stored.fingerprint == fingerprint:
+            return {
+                "found": True,
+                "issue_id": issue.id,
+                "summary": stored.summary,
+                "timeline": timeline,
+                "issue": self.issues.to_dict(issue, include_history=True),
+                "cache_hit": True,
+                "source": "postgres",
+            }
+
         response = self.llm.complete(
             [LlmMessage(role="user", content=json.dumps(context, default=str))],
             system=SUMMARISE_SYSTEM,
             purpose="summarise_issue_history",
+        )
+        IssueHistorySummary.objects.update_or_create(
+            issue=issue,
+            defaults={
+                "summary": response.text,
+                "fingerprint": fingerprint,
+            },
         )
         return {
             "found": True,
@@ -138,6 +179,8 @@ class AgentToolService:
             "summary": response.text,
             "timeline": timeline,
             "issue": self.issues.to_dict(issue, include_history=True),
+            "cache_hit": False,
+            "source": "llm",
         }
 
     def create_next_action(
@@ -343,6 +386,18 @@ class AgentToolService:
             ],
             "timeline": timeline,
         }
+
+    @staticmethod
+    def _summary_fingerprint(issue: Issue, context: dict[str, Any]) -> str:
+        """Hash issue fields + timeline so stale DB summaries are not reused."""
+        payload = {
+            "issue": context["issue"],
+            "updates": context["updates"],
+            "next_actions": context["next_actions"],
+            "issue_id": issue.id,
+        }
+        raw = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
     def _get_issue(self, issue_id: int, user: KeycloakUser | None) -> Issue | None:
         if user:

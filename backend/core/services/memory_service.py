@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -14,8 +15,9 @@ class MemoryService:
     """
     Redis short-term memory.
 
-    Postgres remains the source of truth for customers/issues.
-    Redis holds conversation turns, cached lookups, and recent tool results.
+    Postgres remains the source of truth for customers/issues/summaries.
+    Redis holds conversation turns, cached customer lookups, and recent
+    read-only tool results (short TTL).
     """
 
     def __init__(self, client: redis.Redis | None = None) -> None:
@@ -104,5 +106,29 @@ class MemoryService:
         if not client:
             return None
         key = f"acme:cache:customer:{customer_name.strip().lower()}"
+        raw = client.get(key)
+        return json.loads(raw) if raw else None
+
+    @staticmethod
+    def tool_cache_key(**parts: Any) -> str:
+        raw = json.dumps(parts, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode()).hexdigest()[:40]
+
+    def cache_tool_result(self, tool: str, cache_key: str, data: dict[str, Any]) -> None:
+        client = self.client
+        if not client:
+            return
+        key = f"acme:tool:{tool}:{cache_key}"
+        client.setex(
+            key,
+            settings.REDIS_TOOL_TTL_SECONDS,
+            json.dumps(data, default=str),
+        )
+
+    def get_cached_tool_result(self, tool: str, cache_key: str) -> dict[str, Any] | None:
+        client = self.client
+        if not client:
+            return None
+        key = f"acme:tool:{tool}:{cache_key}"
         raw = client.get(key)
         return json.loads(raw) if raw else None

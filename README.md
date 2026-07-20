@@ -111,7 +111,7 @@ Strategic choices for a reviewable prototype — what we accepted, and why.
 | **LangGraph + LangChain** | A real ReAct agent loop, tool tracing, LangSmith, and Anthropic/OpenAI behind one switch | A heavier dependency than a tiny custom loop — worth it because the same stack supports evals, tracing, and future multi-step workflows |
 | **In-app chat vs MCP** | Chat uses the signed-in user’s roles; MCP exposes the same tools to external hosts (Cursor, etc.) | MCP runs as a demo **admin** identity so callers don’t need to pass end-user tokens. Real RBAC is on the API/chat path; MCP auth is not production-ready |
 | **Keycloak-only users** | Login and roles live in Keycloak; the API reads them from the JWT | No app `users` / `user_roles` tables in Postgres — Keycloak already owns that job, so we don’t keep a second copy to sync |
-| **Postgres + Redis** | Postgres holds the durable truth (issues, chat, traces); Redis warms sessions/caches | If Redis is down, chat still works from Postgres — Redis is speed, not the system of record |
+| **Postgres + Redis** | Postgres holds durable truth (including issue summaries); Redis warms sessions, customer lookups, and recent open-issue tool results | Redis down → chat/summaries still work from Postgres; tool caches are best-effort speedups |
 | **One Compose stack** | Reviewers can `docker compose up` and see Keycloak, API, UI, MCP, and data together | Local all-in-one demo — not how you’d host or scale this in production |
 | **Skills vs tools** | Tools = one capability; Skills = multi-step playbooks (e.g. escalation brief) | Extra concept to learn, but clearer than stuffing workflows into one mega-prompt |
 | **Smoke CLI / eval harness** | Fast agent checks without logging in through the UI | They use a synthetic role (default admin) — for wiring checks, not for proving end-user auth |
@@ -120,8 +120,12 @@ Strategic choices for a reviewable prototype — what we accepted, and why.
 
 | Store | Holds |
 |-------|--------|
-| **Postgres** | Durable customers, issues, updates, next actions, chat conversations/messages, agent-run traces |
-| **Redis** | Warm session cache, customer/tool caches, short-TTL debug traces |
+| **Postgres** | Durable customers, issues, updates, next actions, **issue history summaries** (LLM output, fingerprint-invalidated), chat conversations/messages, agent-run traces |
+| **Redis** | Warm session turns, **cached customer lookups** (`REDIS_CACHE_TTL_SECONDS`), **recent open-issue tool results** (`REDIS_TOOL_TTL_SECONDS`, keyed by customer + viewer for RBAC), short-TTL debug traces |
+
+**Why summaries in Postgres:** expensive LLM output that should survive Redis restarts and stay correct when the timeline changes (fingerprint includes issue fields, updates, and next actions).
+
+**Why tool/customer lookups in Redis:** short-lived speedups for repeated reads in one session; TTL keeps them fresh enough for a demo without complex invalidation. Mutating tools (`create_next_action`) are never cached.
 
 Chat context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from **Postgres**, each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200). Redis is rehydrated when empty.
 
