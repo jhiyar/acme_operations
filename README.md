@@ -190,4 +190,25 @@ python manage.py test core.tests issues.tests
 
 ## AI tool usage notes (assessment)
 
-AI coding assistants (Cursor) were used to scaffold services, MCP wiring, frontend widgets, and tests. Human review focused on RBAC, tool contracts, seed realism, Docker env handling (`backend/.env`), and eval failures (model IDs, partial customer names, keyword search). LLM outputs for summarise / next-action / escalation are treated as assistive and grounded only via tool-fetched context. Secrets never belong in git; API keys stay in local `.env`.
+### How AI was used
+
+Cursor (AI coding assistants) was used throughout this case study as a **pair-programming accelerator**, not as an unsupervised code generator. The working loop was:
+
+1. **Design first** — stack, folder layout, libs, and patterns were decided up front (often sketched or iterated in chat).
+2. **Implement with AI** — scaffolding and boilerplate were generated against that design.
+3. **Review and reshape by hand** — every meaningful chunk was read, tested, and changed where the design or product rules needed to win.
+
+### What stayed human-owned
+
+- **Backend shape**: Python / Django + DRF, app split (`core` vs `issues`), service-based OOP (thin views → services → models), RBAC helpers living **per app** (`core/permissions.py`, `issues/permissions.py`) rather than one dumping ground.
+- **Agent design**: LangGraph ReAct orchestrator, tool contracts, prompts, Skills vs tools, Redis memory + Postgres as source of truth, MCP as an adapter over the same domain services.
+- **Frontend shape**: React + TypeScript, feature folders, React Hook Form for forms, TanStack Query for server state, shared widgets (`CustomModal`, `TextField`), create/edit forms keyed by optional `id`.
+- **Product / security choices**: Keycloak-only identities (no local `users` table), admin vs support vs sales gates, delete confirmations, “don’t delete customers with open issues”, eval harness and honesty about MCP’s synthetic admin user.
+
+### What AI sped up
+
+Scaffolding services, serializers/views, MCP wiring, UI pages/modals, unit/API tests, Docker/env glue, and first-pass wording for docs. AI was also useful for exploring options (e.g. permission layout, history windowing, observability models) before committing to one approach.
+
+### Guardrails
+
+LLM outputs inside the product (summarise / next-action / escalation) are treated as **assistive** and grounded only on tool-fetched context. Secrets never belong in git; API keys stay in local `.env`. Eval failures (model IDs, partial customer names, keyword search) were chased down and fixed with human judgment, not accepted as “the model said so.”
