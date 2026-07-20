@@ -3,7 +3,11 @@ import axios from "axios";
 
 import { Button } from "../../widgets/Button";
 import { CustomModal } from "../../widgets/CustomModal";
-import { useAuth } from "../core/AuthProvider";
+import {
+  ADMIN_ROLES,
+  PermissionCheck,
+  useHasRole,
+} from "../../widgets/PermissionCheck";
 import { CustomerForm } from "./components/CustomerForm";
 import {
   useCustomers,
@@ -13,12 +17,10 @@ import {
 
 function CustomerRow({
   customer,
-  canManage,
   onEdit,
   onDelete,
 }: {
   customer: Customer;
-  canManage: boolean;
   onEdit: (customerId: number) => void;
   onDelete: (customer: Customer) => void;
 }) {
@@ -40,7 +42,7 @@ function CustomerRow({
       </p>
       {customer.notes ? <p className="issue-desc">{customer.notes}</p> : null}
 
-      {canManage ? (
+      <PermissionCheck roles={ADMIN_ROLES}>
         <div className="issue-manage">
           <button
             type="button"
@@ -57,14 +59,13 @@ function CustomerRow({
             Delete
           </button>
         </div>
-      ) : null}
+      </PermissionCheck>
     </article>
   );
 }
 
 export function CustomersPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.roles.includes("admin") ?? false;
+  const isAdmin = useHasRole(ADMIN_ROLES);
   const [modalCustomerId, setModalCustomerId] = useState<
     number | null | undefined
   >(undefined);
@@ -100,7 +101,7 @@ export function CustomersPage() {
               >
                 Refresh
               </button>
-              {isAdmin ? (
+              <PermissionCheck roles={ADMIN_ROLES}>
                 <button
                   type="button"
                   className="btn btn-primary btn-compact"
@@ -108,13 +109,13 @@ export function CustomersPage() {
                 >
                   New customer
                 </button>
-              ) : null}
+              </PermissionCheck>
             </div>
           </div>
           <p className="muted issues-subtitle">
             {isAdmin
               ? "Admin view — create, edit, and delete customer profiles."
-              : "Customer directory (read-only)."}{" "}
+              : "Customer directory (read-only for sales and support)."}{" "}
             · {data?.count ?? 0} customers
           </p>
         </header>
@@ -142,7 +143,6 @@ export function CustomersPage() {
             <CustomerRow
               key={customer.id}
               customer={customer}
-              canManage={isAdmin}
               onEdit={(customerId) => setModalCustomerId(customerId)}
               onDelete={setCustomerToDelete}
             />
@@ -150,72 +150,76 @@ export function CustomersPage() {
         </div>
       </section>
 
-      <CustomModal
-        open={modalOpen}
-        title={isCreate ? "New customer" : `Edit customer #${modalCustomerId}`}
-        onClose={() => setModalCustomerId(undefined)}
-      >
-        <CustomerForm
-          id={modalCustomerId}
-          onCancel={() => setModalCustomerId(undefined)}
-          onSuccess={() => setModalCustomerId(undefined)}
-        />
-      </CustomModal>
+      <PermissionCheck roles={ADMIN_ROLES}>
+        <CustomModal
+          open={modalOpen}
+          title={isCreate ? "New customer" : `Edit customer #${modalCustomerId}`}
+          onClose={() => setModalCustomerId(undefined)}
+        >
+          <CustomerForm
+            id={modalCustomerId}
+            onCancel={() => setModalCustomerId(undefined)}
+            onSuccess={() => setModalCustomerId(undefined)}
+          />
+        </CustomModal>
 
-      <CustomModal
-        open={customerToDelete != null}
-        title="Delete customer"
-        onClose={closeDeleteDialog}
-      >
-        {customerToDelete ? (
-          <div className="confirm-dialog">
-            <p>
-              Delete customer #{customerToDelete.id} “{customerToDelete.name}”?
-              Customers with linked issues cannot be removed until those issues
-              are deleted or reassigned.
-            </p>
-            {deleteError ? <p className="error">{deleteError}</p> : null}
-            <div className="issue-form-actions">
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={deleteCustomer.isPending}
-                onClick={closeDeleteDialog}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={deleteCustomer.isPending}
-                onClick={() => {
-                  setDeleteError(null);
-                  deleteCustomer.mutate(customerToDelete.id, {
-                    onSuccess: () => {
-                      setCustomerToDelete(null);
-                      deleteCustomer.reset();
-                    },
-                    onError: (err) => {
-                      if (axios.isAxiosError(err)) {
-                        const detail = err.response?.data?.detail;
+        <CustomModal
+          open={customerToDelete != null}
+          title="Delete customer"
+          onClose={closeDeleteDialog}
+        >
+          {customerToDelete ? (
+            <div className="confirm-dialog">
+              <p>
+                Delete customer #{customerToDelete.id} “{customerToDelete.name}”?
+                Customers with linked issues cannot be removed until those issues
+                are deleted or reassigned.
+              </p>
+              {deleteError ? <p className="error">{deleteError}</p> : null}
+              <div className="issue-form-actions">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={deleteCustomer.isPending}
+                  onClick={closeDeleteDialog}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={deleteCustomer.isPending}
+                  onClick={() => {
+                    setDeleteError(null);
+                    deleteCustomer.mutate(customerToDelete.id, {
+                      onSuccess: () => {
+                        setCustomerToDelete(null);
+                        deleteCustomer.reset();
+                      },
+                      onError: (err) => {
+                        if (axios.isAxiosError(err)) {
+                          const detail = err.response?.data?.detail;
+                          setDeleteError(
+                            typeof detail === "string"
+                              ? detail
+                              : "Delete failed — check permissions and try again.",
+                          );
+                          return;
+                        }
                         setDeleteError(
-                          typeof detail === "string"
-                            ? detail
-                            : "Delete failed — check permissions and try again.",
+                          "Delete failed — check permissions and try again.",
                         );
-                        return;
-                      }
-                      setDeleteError("Delete failed — check permissions and try again.");
-                    },
-                  });
-                }}
-              >
-                {deleteCustomer.isPending ? "Deleting…" : "Delete"}
-              </Button>
+                      },
+                    });
+                  }}
+                >
+                  {deleteCustomer.isPending ? "Deleting…" : "Delete"}
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : null}
-      </CustomModal>
+          ) : null}
+        </CustomModal>
+      </PermissionCheck>
     </div>
   );
 }

@@ -170,6 +170,13 @@ class IssueServiceTests(TestCase):
             IssueUpdate.objects.filter(issue=self.other_issue).count(),
             1,
         )
+        update_id = result["update"]["id"]
+        deleted = self.service.delete_update(support, self.other_issue.id, update_id)
+        self.assertTrue(deleted["deleted"])
+        self.assertEqual(
+            IssueUpdate.objects.filter(issue=self.other_issue).count(),
+            0,
+        )
 
     def test_admin_can_create_issue(self) -> None:
         admin = make_user("admin", "admin")

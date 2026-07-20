@@ -2,6 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 
 import { httpService } from "../../../services/HttpService";
 
+export type IssueUpdate = {
+  id: number;
+  author: string;
+  body: string;
+  created_at: string;
+};
+
 export type Issue = {
   id: number;
   title: string;
@@ -15,6 +22,7 @@ export type Issue = {
   };
   created_at: string;
   updated_at: string;
+  updates?: IssueUpdate[];
 };
 
 export type IssuesResponse = {

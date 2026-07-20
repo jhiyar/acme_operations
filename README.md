@@ -102,28 +102,38 @@ MCP separates **tool definitions/transport** from the **agent runtime**. The Lan
 
 The **Customer Escalation Summary** skill returns executive summary, risk level, recommended next action, and missing information.
 
-## Data & auth trade-offs
+## Trade-offs
 
-### Redis vs Postgres
+Strategic choices for a reviewable prototype — what we accepted, and why.
+
+| Choice | What we gained | What we accepted |
+|--------|----------------|------------------|
+| **LangGraph + LangChain** | A real ReAct agent loop, tool tracing, LangSmith, and Anthropic/OpenAI behind one switch | A heavier dependency than a tiny custom loop — worth it because the same stack supports evals, tracing, and future multi-step workflows |
+| **In-app chat vs MCP** | Chat uses the signed-in user’s roles; MCP exposes the same tools to external hosts (Cursor, etc.) | MCP runs as a demo **admin** identity so callers don’t need to pass end-user tokens. Real RBAC is on the API/chat path; MCP auth is not production-ready |
+| **Keycloak-only users** | Login and roles live in Keycloak; the API reads them from the JWT | No app `users` / `user_roles` tables in Postgres — Keycloak already owns that job, so we don’t keep a second copy to sync |
+| **Postgres + Redis** | Postgres holds the durable truth (issues, chat, traces); Redis warms sessions/caches | If Redis is down, chat still works from Postgres — Redis is speed, not the system of record |
+| **One Compose stack** | Reviewers can `docker compose up` and see Keycloak, API, UI, MCP, and data together | Local all-in-one demo — not how you’d host or scale this in production |
+| **Skills vs tools** | Tools = one capability; Skills = multi-step playbooks (e.g. escalation brief) | Extra concept to learn, but clearer than stuffing workflows into one mega-prompt |
+| **Smoke CLI / eval harness** | Fast agent checks without logging in through the UI | They use a synthetic role (default admin) — for wiring checks, not for proving end-user auth |
+
+### Redis vs Postgres (detail)
 
 | Store | Holds |
 |-------|--------|
 | **Postgres** | Durable customers, issues, updates, next actions, chat conversations/messages, agent-run traces |
 | **Redis** | Warm session cache, customer/tool caches, short-TTL debug traces |
 
-Chat agent context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from **Postgres**, with each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200). Redis is rehydrated when empty; if Redis is down, multi-turn chat still works via Postgres.
-
-### `users` / `user_roles` tables
-
-The brief lists `users` or `user_roles` as a minimum schema item. **This prototype does not duplicate users in Postgres.** Identities and roles (`sales_user`, `support_user`, `admin`) live in **Keycloak**; the API trusts the JWT and enforces RBAC in services/views. Admins manage users from the **Users** page (`/users`), which proxies the Keycloak Admin REST API (local demo uses the master `admin-cli` bootstrap credentials). Rationale: one source of truth for authn/z, less sync drift, Keycloak is already a hard requirement.
+Chat context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURNS` (default 8) messages from **Postgres**, each turn capped at `AGENT_HISTORY_MAX_CHARS_PER_TURN` (default 1200). Redis is rehydrated when empty.
 
 ### RBAC (demonstrated)
 
-| Role | Issues list | Status / timeline note | Issue CRUD | Customer CRUD | Create next action (agent tool) |
-|------|-------------|------------------------|------------|---------------|----------------------------------|
-| `sales_user` | Assigned only | No | No | No (read directory) | No (tool returns RBAC error) |
-| `support_user` | Assigned only | Yes (`PATCH` status, `POST .../updates/`) | No | No (read directory) | Yes |
-| `admin` | All issues | Yes | Yes | Yes | Yes |
+| Role | Issues / customers | Status / timeline note | Issue & customer CRUD | Create next action (agent tool) | Observability |
+|------|--------------------|------------------------|----------------------|----------------------------------|---------------|
+| `sales_user` | Read assigned issues + customer directory | No | No | No (tool returns RBAC error) | No |
+| `support_user` | Read assigned issues + customer directory | Yes | No | Yes | No |
+| `admin` | All issues + customers | Yes | Yes | Yes | Yes |
+
+Frontend gates use `<PermissionCheck roles={[…]}>` (menu + page actions). Backend enforces the same rules in services/views.
 
 ## Agent tools
 
@@ -157,6 +167,22 @@ Observability on each `/api/chat/` request:
 - Durable Postgres: `AgentRun`, `LlmCall`, `ToolCall`
 - Admin UI at `/observability` (admin only)
 - Structured logs (`acme.llm`, `acme.observability`)
+- **LangSmith** (optional): LangGraph/LangChain run traces when enabled via env
+
+### LangSmith
+
+Agent runs (`create_react_agent`) are traced to [LangSmith](https://smith.langchain.com) when these are set in `backend/.env`:
+
+```bash
+LANGCHAIN_TRACING_V2=true
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_…
+LANGSMITH_PROJECT=acme-operations
+# optional
+# LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+No code changes required — LangChain reads these from the environment. Restart the backend after editing `.env`. Keep the API key out of git.
 
 Chat UX: conversation list/resume, Markdown replies, expandable Markdown/JSON on Observability.
 

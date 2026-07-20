@@ -5,9 +5,6 @@ from core.views import (
     AgentRunListView,
     AgentToolCallView,
     AgentToolsView,
-    ChatView,
-    ConversationDetailView,
-    ConversationListCreateView,
     HealthView,
     MeView,
     UserDetailView,
@@ -17,17 +14,7 @@ from core.views import (
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
     path("me/", MeView.as_view(), name="me"),
-    path("chat/", ChatView.as_view(), name="chat"),
-    path(
-        "conversations/",
-        ConversationListCreateView.as_view(),
-        name="conversations",
-    ),
-    path(
-        "conversations/<uuid:conversation_id>/",
-        ConversationDetailView.as_view(),
-        name="conversation-detail",
-    ),
+    path("", include("chat.urls")),
     path("users/", UserListCreateView.as_view(), name="users"),
     path("users/<str:user_id>/", UserDetailView.as_view(), name="user-detail"),
     path("admin/runs/", AgentRunListView.as_view(), name="admin-runs"),

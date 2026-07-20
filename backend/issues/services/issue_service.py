@@ -217,6 +217,38 @@ class IssueService:
             "issue": self.to_dict(issue, include_history=True),
         }
 
+    def delete_update(
+        self,
+        user: KeycloakUser,
+        issue_id: int,
+        update_id: int,
+    ) -> dict[str, Any]:
+        if not can_update_issues(user):
+            return self._fail(
+                deleted=False,
+                error="Only support_user or admin can delete issue updates",
+                code="forbidden",
+            )
+
+        issue = self.get_for_user(user, issue_id)
+        if not issue:
+            return self._fail(
+                deleted=False,
+                error=f"Issue #{issue_id} not found or not visible",
+                code="not_found",
+            )
+
+        update = IssueUpdate.objects.filter(pk=update_id, issue=issue).first()
+        if not update:
+            return self._fail(
+                deleted=False,
+                error=f"Update #{update_id} not found on issue #{issue_id}",
+                code="not_found",
+            )
+
+        update.delete()
+        return {"deleted": True, "id": update_id, "issue_id": issue_id}
+
     def open_issues_for_customer(
         self,
         customer_name: str,

@@ -67,3 +67,19 @@ export function useAddIssueUpdate() {
     },
   });
 }
+
+export function useDeleteIssueUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      issueId,
+      updateId,
+    }: {
+      issueId: number;
+      updateId: number;
+    }) => httpService.delete(`/issues/${issueId}/updates/${updateId}/`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["issues"] });
+    },
+  });
+}

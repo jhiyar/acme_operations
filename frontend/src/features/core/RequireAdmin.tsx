@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "./AuthProvider";
+import { ADMIN_ROLES, hasAnyRole } from "../../widgets/PermissionCheck";
 
 export function RequireAdmin() {
   const { user, isReady } = useAuth();
@@ -13,7 +14,7 @@ export function RequireAdmin() {
     );
   }
 
-  if (!user?.roles.includes("admin")) {
+  if (!hasAnyRole(user?.roles, ADMIN_ROLES)) {
     return <Navigate to="/issues" replace />;
   }
 

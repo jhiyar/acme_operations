@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { getAgentRun, listAgentRuns } from "../../services/ObservabilityService";
+import { AdminView } from "../../widgets/AdminView";
 import { ExpandableMarkdown } from "../../widgets/ExpandableMarkdown";
 import { PrettyJson } from "../../widgets/PrettyJson";
 
@@ -14,6 +15,14 @@ function formatTime(value: string) {
 }
 
 export function ObservabilityPage() {
+  return (
+    <AdminView redirect>
+      <ObservabilityPageContent />
+    </AdminView>
+  );
+}
+
+function ObservabilityPageContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const runsQuery = useQuery({
     queryKey: ["admin-runs"],

@@ -22,6 +22,7 @@ class NextActionSerializer(serializers.ModelSerializer):
 
 class IssueSerializer(serializers.ModelSerializer):
     customer = IssueCustomerSerializer(read_only=True)
+    updates = IssueUpdateSerializer(many=True, read_only=True)
 
     class Meta:
         model = Issue
@@ -35,6 +36,7 @@ class IssueSerializer(serializers.ModelSerializer):
             "customer",
             "created_at",
             "updated_at",
+            "updates",
         )
 
 

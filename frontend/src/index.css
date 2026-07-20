@@ -1085,6 +1085,41 @@ h1 {
   max-width: 65ch;
 }
 
+.issue-timeline {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.issue-timeline li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.55rem;
+  border-left: 2px solid var(--line);
+  background: color-mix(in srgb, var(--line) 18%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+
+.issue-timeline-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.issue-timeline-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.issue-timeline-body {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
 .issue-manage {
   margin-top: 0.65rem;
   display: flex;

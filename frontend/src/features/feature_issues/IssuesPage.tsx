@@ -2,11 +2,17 @@ import { useState } from "react";
 
 import { Button } from "../../widgets/Button";
 import { CustomModal } from "../../widgets/CustomModal";
-import { useAuth } from "../core/AuthProvider";
+import {
+  ADMIN_ROLES,
+  ISSUE_UPDATE_ROLES,
+  PermissionCheck,
+  useHasRole,
+} from "../../widgets/PermissionCheck";
 import { IssueForm } from "./components/IssueForm";
 import {
   useAddIssueUpdate,
   useDeleteIssue,
+  useDeleteIssueUpdate,
   useUpdateIssue,
 } from "./hooks/useIssueMutations";
 import { useIssues, type Issue } from "./hooks/useIssues";
@@ -28,21 +34,19 @@ const EDITABLE_STATUSES = [
 
 function IssueRow({
   issue,
-  canEdit,
-  canManage,
   onEdit,
   onDelete,
 }: {
   issue: Issue;
-  canEdit: boolean;
-  canManage: boolean;
   onEdit: (issueId: number) => void;
   onDelete: (issue: Issue) => void;
 }) {
   const [note, setNote] = useState("");
   const updateIssue = useUpdateIssue();
   const addUpdate = useAddIssueUpdate();
-  const busy = updateIssue.isPending || addUpdate.isPending;
+  const deleteUpdate = useDeleteIssueUpdate();
+  const busy =
+    updateIssue.isPending || addUpdate.isPending || deleteUpdate.isPending;
 
   return (
     <article className="issue-row">
@@ -60,7 +64,45 @@ function IssueRow({
       </p>
       {issue.description ? <p className="issue-desc">{issue.description}</p> : null}
 
-      {canManage ? (
+      {issue.updates && issue.updates.length > 0 ? (
+        <ul className="issue-timeline">
+          {issue.updates.map((update) => (
+            <li key={update.id}>
+              <div className="issue-timeline-main">
+                <span className="issue-timeline-meta">
+                  {update.author} · {new Date(update.created_at).toLocaleString()}
+                </span>
+                <span className="issue-timeline-body">{update.body}</span>
+              </div>
+              <PermissionCheck roles={ISSUE_UPDATE_ROLES}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-compact issue-delete"
+                  disabled={busy}
+                  aria-label={`Delete note by ${update.author}`}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Delete this timeline note? This cannot be undone.",
+                      )
+                    ) {
+                      return;
+                    }
+                    deleteUpdate.mutate({
+                      issueId: issue.id,
+                      updateId: update.id,
+                    });
+                  }}
+                >
+                  Delete
+                </button>
+              </PermissionCheck>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <PermissionCheck roles={ADMIN_ROLES}>
         <div className="issue-manage">
           <button
             type="button"
@@ -79,9 +121,9 @@ function IssueRow({
             Delete
           </button>
         </div>
-      ) : null}
+      </PermissionCheck>
 
-      {canEdit ? (
+      <PermissionCheck roles={ISSUE_UPDATE_ROLES}>
         <div className="issue-edit">
           <label className="filter-field compact">
             <span className="sr-only">Update status</span>
@@ -138,16 +180,14 @@ function IssueRow({
             <p className="error issue-edit-error">Update failed — check permissions.</p>
           ) : null}
         </div>
-      ) : null}
+      </PermissionCheck>
     </article>
   );
 }
 
 export function IssuesPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.roles.includes("admin") ?? false;
-  const canEdit =
-    (user?.roles.includes("admin") || user?.roles.includes("support_user")) ?? false;
+  const isAdmin = useHasRole(ADMIN_ROLES);
+  const canUpdate = useHasRole(ISSUE_UPDATE_ROLES);
   const [status, setStatus] = useState("");
   const [modalIssueId, setModalIssueId] = useState<number | null | undefined>(
     undefined,
@@ -198,7 +238,7 @@ export function IssuesPage() {
               >
                 Refresh
               </button>
-              {isAdmin ? (
+              <PermissionCheck roles={ADMIN_ROLES}>
                 <button
                   type="button"
                   className="btn btn-primary btn-compact"
@@ -206,15 +246,15 @@ export function IssuesPage() {
                 >
                   New issue
                 </button>
-              ) : null}
+              </PermissionCheck>
             </div>
           </div>
           <p className="muted issues-subtitle">
             {isAdmin
               ? "Admin view — create, edit, and delete issues across the organisation."
-              : canEdit
+              : canUpdate
                 ? "Support view — update status and post notes on assigned issues."
-                : "Your assigned issues only (read-only)."}{" "}
+                : "Sales view — assigned issues only (read-only)."}{" "}
             · Scope: {data?.scope === "all" ? "everyone" : "assigned to you"} ·{" "}
             {data?.count ?? 0} issues
           </p>
@@ -241,8 +281,6 @@ export function IssuesPage() {
             <IssueRow
               key={issue.id}
               issue={issue}
-              canEdit={canEdit}
-              canManage={isAdmin}
               onEdit={(issueId) => setModalIssueId(issueId)}
               onDelete={setIssueToDelete}
             />
@@ -250,60 +288,62 @@ export function IssuesPage() {
         </div>
       </section>
 
-      <CustomModal
-        open={modalOpen}
-        title={isCreate ? "New issue" : `Edit issue #${modalIssueId}`}
-        onClose={() => setModalIssueId(undefined)}
-      >
-        <IssueForm
-          id={modalIssueId}
-          onCancel={() => setModalIssueId(undefined)}
-          onSuccess={() => setModalIssueId(undefined)}
-        />
-      </CustomModal>
+      <PermissionCheck roles={ADMIN_ROLES}>
+        <CustomModal
+          open={modalOpen}
+          title={isCreate ? "New issue" : `Edit issue #${modalIssueId}`}
+          onClose={() => setModalIssueId(undefined)}
+        >
+          <IssueForm
+            id={modalIssueId}
+            onCancel={() => setModalIssueId(undefined)}
+            onSuccess={() => setModalIssueId(undefined)}
+          />
+        </CustomModal>
 
-      <CustomModal
-        open={issueToDelete != null}
-        title="Delete issue"
-        onClose={closeDeleteDialog}
-      >
-        {issueToDelete ? (
-          <div className="confirm-dialog">
-            <p>
-              Delete issue #{issueToDelete.id} “{issueToDelete.title}”? This cannot
-              be undone.
-            </p>
-            {deleteIssue.isError ? (
-              <p className="error">Delete failed — check permissions and try again.</p>
-            ) : null}
-            <div className="issue-form-actions">
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={deleteIssue.isPending}
-                onClick={closeDeleteDialog}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={deleteIssue.isPending}
-                onClick={() => {
-                  deleteIssue.mutate(issueToDelete.id, {
-                    onSuccess: () => {
-                      setIssueToDelete(null);
-                      deleteIssue.reset();
-                    },
-                  });
-                }}
-              >
-                {deleteIssue.isPending ? "Deleting…" : "Delete"}
-              </Button>
+        <CustomModal
+          open={issueToDelete != null}
+          title="Delete issue"
+          onClose={closeDeleteDialog}
+        >
+          {issueToDelete ? (
+            <div className="confirm-dialog">
+              <p>
+                Delete issue #{issueToDelete.id} “{issueToDelete.title}”? This cannot
+                be undone.
+              </p>
+              {deleteIssue.isError ? (
+                <p className="error">Delete failed — check permissions and try again.</p>
+              ) : null}
+              <div className="issue-form-actions">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={deleteIssue.isPending}
+                  onClick={closeDeleteDialog}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={deleteIssue.isPending}
+                  onClick={() => {
+                    deleteIssue.mutate(issueToDelete.id, {
+                      onSuccess: () => {
+                        setIssueToDelete(null);
+                        deleteIssue.reset();
+                      },
+                    });
+                  }}
+                >
+                  {deleteIssue.isPending ? "Deleting…" : "Delete"}
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : null}
-      </CustomModal>
+          ) : null}
+        </CustomModal>
+      </PermissionCheck>
     </div>
   );
 }

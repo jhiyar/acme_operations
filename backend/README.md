@@ -3,7 +3,8 @@
 Apps:
 
 - `config/` — settings, root URLconf
-- `core/` — auth, chat agent, conversations, observability, skills, MCP bootstrap helpers
+- `core/` — auth, agent tools, observability, skills, MCP bootstrap helpers
+- `chat/` — assistant chat + conversation API (views/urls)
 - `issues/` — customers, issues, timeline notes, next actions
 - `evals/` — evaluation narrative (`RESULTS.md`); raw harness output is gitignored
 - `mcp_server/` — FastMCP process exposing the same domain tools

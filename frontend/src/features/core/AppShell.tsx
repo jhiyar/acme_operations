@@ -1,28 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { Button } from "../../widgets/Button";
+import {
+  ADMIN_ROLES,
+  ASSISTANT_ROLES,
+  PermissionCheck,
+} from "../../widgets/PermissionCheck";
 import { useAuth } from "./AuthProvider";
 
 const SIDEBAR_KEY = "acme.sidebar.collapsed";
 
-const BASE_NAV = [
-  { to: "/chat", label: "Assistant", short: "A" },
-  { to: "/issues", label: "Issues", short: "I" },
-  { to: "/customers", label: "Customers", short: "C" },
-] as const;
-
-const ADMIN_NAV = [
-  { to: "/observability", label: "Observability", short: "O" },
+const NAV_ITEMS = [
+  {
+    to: "/chat",
+    label: "Assistant",
+    short: "A",
+    roles: ASSISTANT_ROLES,
+  },
+  {
+    to: "/issues",
+    label: "Issues",
+    short: "I",
+    roles: ASSISTANT_ROLES,
+  },
+  {
+    to: "/customers",
+    label: "Customers",
+    short: "C",
+    roles: ASSISTANT_ROLES,
+  },
+  {
+    to: "/observability",
+    label: "Observability",
+    short: "O",
+    roles: ADMIN_ROLES,
+  },
 ] as const;
 
 export function AppShell() {
   const { user, logout } = useAuth();
-  const isAdmin = user?.roles.includes("admin") ?? false;
-  const navItems = useMemo(
-    () => (isAdmin ? [...BASE_NAV, ...ADMIN_NAV] : [...BASE_NAV]),
-    [isAdmin],
-  );
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_KEY) === "1";
@@ -64,20 +81,23 @@ export function AppShell() {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? "active" : ""}`
-              }
-              title={item.label}
-            >
-              <span className="sidebar-link-short" aria-hidden="true">
-                {item.short}
-              </span>
-              {!collapsed ? <span className="sidebar-link-label">{item.label}</span> : null}
-            </NavLink>
+          {NAV_ITEMS.map((item) => (
+            <PermissionCheck key={item.to} roles={item.roles}>
+              <NavLink
+                to={item.to}
+                className={({ isActive }) =>
+                  `sidebar-link ${isActive ? "active" : ""}`
+                }
+                title={item.label}
+              >
+                <span className="sidebar-link-short" aria-hidden="true">
+                  {item.short}
+                </span>
+                {!collapsed ? (
+                  <span className="sidebar-link-label">{item.label}</span>
+                ) : null}
+              </NavLink>
+            </PermissionCheck>
           ))}
         </nav>
 

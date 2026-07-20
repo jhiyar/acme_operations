@@ -145,6 +145,22 @@ class IssueUpdateCreateView(generics.GenericAPIView):
         return Response(result, status=status.HTTP_201_CREATED)
 
 
+class IssueUpdateDetailView(generics.GenericAPIView):
+    """Delete a timeline note (support / admin)."""
+
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, CanUseAssistant, CanUpdateIssues]
+
+    def delete(self, request: Request, issue_id: int, update_id: int) -> Response:
+        result = IssueService().delete_update(request.user, issue_id, update_id)
+        if not result.get("deleted"):
+            return Response(
+                {"detail": result.get("error")},
+                status=_service_error_status(result),
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class CustomerListCreateView(generics.ListCreateAPIView):
     """List customers for assistant roles; admin may create via POST."""
 
