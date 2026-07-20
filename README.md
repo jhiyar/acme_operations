@@ -115,7 +115,7 @@ Chat agent context uses a **sliding window** of the last `AGENT_HISTORY_MAX_TURN
 
 ### `users` / `user_roles` tables
 
-The brief lists `users` or `user_roles` as a minimum schema item. **This prototype does not duplicate users in Postgres.** Identities and roles (`sales_user`, `support_user`, `admin`) live in **Keycloak**; the API trusts the JWT and enforces RBAC in services/views. Rationale: one source of truth for authn/z, less sync drift, Keycloak is already a hard requirement. A local mirror table would only help offline reporting — deferred intentionally.
+The brief lists `users` or `user_roles` as a minimum schema item. **This prototype does not duplicate users in Postgres.** Identities and roles (`sales_user`, `support_user`, `admin`) live in **Keycloak**; the API trusts the JWT and enforces RBAC in services/views. Admins manage users from the **Users** page (`/users`), which proxies the Keycloak Admin REST API (local demo uses the master `admin-cli` bootstrap credentials). Rationale: one source of truth for authn/z, less sync drift, Keycloak is already a hard requirement.
 
 ### RBAC (demonstrated)
 

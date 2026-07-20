@@ -28,6 +28,11 @@ KEYCLOAK_ISSUER_URL = os.environ.get("KEYCLOAK_ISSUER_URL", KEYCLOAK_SERVER_URL)
 KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "acme")
 KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "acme-frontend")
 KEYCLOAK_AUDIENCE = os.environ.get("KEYCLOAK_AUDIENCE", KEYCLOAK_CLIENT_ID)
+# Admin REST (user management UI) — local demo uses master bootstrap admin-cli
+KEYCLOAK_ADMIN_REALM = os.environ.get("KEYCLOAK_ADMIN_REALM", "master")
+KEYCLOAK_ADMIN_CLIENT_ID = os.environ.get("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+KEYCLOAK_ADMIN_USERNAME = os.environ.get("KEYCLOAK_ADMIN_USERNAME", "admin")
+KEYCLOAK_ADMIN_PASSWORD = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

@@ -10,6 +10,8 @@ from core.views import (
     ConversationListCreateView,
     HealthView,
     MeView,
+    UserDetailView,
+    UserListCreateView,
 )
 
 urlpatterns = [
@@ -26,6 +28,8 @@ urlpatterns = [
         ConversationDetailView.as_view(),
         name="conversation-detail",
     ),
+    path("users/", UserListCreateView.as_view(), name="users"),
+    path("users/<str:user_id>/", UserDetailView.as_view(), name="user-detail"),
     path("admin/runs/", AgentRunListView.as_view(), name="admin-runs"),
     path(
         "admin/runs/<uuid:run_id>/",

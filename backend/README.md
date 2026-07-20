@@ -42,6 +42,8 @@ Docker: `docker compose up --build` from the repo root (see root README).
 | POST | `/issues/:id/updates/` | support+admin | Timeline note |
 | GET/POST | `/customers/` | assistant; **POST admin** | List / create |
 | GET/PATCH/DELETE | `/customers/:id/` | GET assistant; mutations admin | Cannot delete if issues remain |
+| GET/POST | `/users/` | **admin** | Keycloak user directory / create |
+| GET/PATCH/DELETE | `/users/:id/` | **admin** | Update/delete; cannot delete self |
 | GET | `/agent/tools/` | assistant roles | Debug/eval tool specs |
 | POST | `/agent/tools/call/` | assistant roles | Debug/eval single tool invoke |
 | GET | `/admin/runs/` | admin | Observability list |

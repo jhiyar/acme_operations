@@ -532,6 +532,16 @@ h1 {
   line-height: 1.45;
 }
 
+.checkbox-field {
+  align-content: center;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: auto;
+  margin-top: 0.35rem;
+  justify-self: start;
+}
+
 .bubble-tools {
   margin-top: 0.45rem !important;
   font-size: 0.78rem;

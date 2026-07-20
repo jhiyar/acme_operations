@@ -5,10 +5,16 @@ from rest_framework.response import Response
 from core.authentication import KeycloakJWTAuthentication
 from core.models import AgentRun, Conversation
 from core.permissions import CanUseAssistant, IsAdmin, IsAuthenticatedKeycloak
-from core.serializers import AgentToolCallSerializer, ChatRequestSerializer
+from core.serializers import (
+    AgentToolCallSerializer,
+    ChatRequestSerializer,
+    UserPatchSerializer,
+    UserWriteSerializer,
+)
 from core.services import AgentToolService, ChatService, HealthService, KeycloakAuthService
 from core.services.agent_run_service import AgentRunService
 from core.services.conversation_service import ConversationService
+from core.services.keycloak_admin_service import KeycloakAdminError, KeycloakAdminService
 
 
 class HealthView(generics.GenericAPIView):
@@ -197,3 +203,73 @@ class AgentToolCallView(generics.GenericAPIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"tool": tool, "result": result})
+
+
+def _keycloak_admin_error_response(exc: KeycloakAdminError) -> Response:
+    code = exc.status_code
+    if code not in {
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_409_CONFLICT,
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+    }:
+        code = status.HTTP_400_BAD_REQUEST
+    return Response({"detail": exc.message}, status=code)
+
+
+class UserListCreateView(generics.GenericAPIView):
+    """Admin-only Keycloak user directory."""
+
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, IsAdmin]
+
+    def get(self, request: Request) -> Response:
+        try:
+            users = KeycloakAdminService().list_users()
+        except KeycloakAdminError as exc:
+            return _keycloak_admin_error_response(exc)
+        return Response({"count": len(users), "users": users})
+
+    def post(self, request: Request) -> Response:
+        serializer = UserWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            user = KeycloakAdminService().create_user(**serializer.validated_data)
+        except KeycloakAdminError as exc:
+            return _keycloak_admin_error_response(exc)
+        return Response({"created": True, "user": user}, status=status.HTTP_201_CREATED)
+
+
+class UserDetailView(generics.GenericAPIView):
+    authentication_classes = [KeycloakJWTAuthentication]
+    permission_classes = [IsAuthenticatedKeycloak, IsAdmin]
+
+    def get(self, request: Request, user_id: str) -> Response:
+        try:
+            user = KeycloakAdminService().get_user(user_id)
+        except KeycloakAdminError as exc:
+            return _keycloak_admin_error_response(exc)
+        return Response(user)
+
+    def patch(self, request: Request, user_id: str) -> Response:
+        serializer = UserPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            user = KeycloakAdminService().update_user(
+                user_id, **serializer.validated_data
+            )
+        except KeycloakAdminError as exc:
+            return _keycloak_admin_error_response(exc)
+        return Response({"updated": True, "user": user})
+
+    def delete(self, request: Request, user_id: str) -> Response:
+        if user_id == getattr(request.user, "sub", None):
+            return Response(
+                {"detail": "You cannot delete your own account"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            KeycloakAdminService().delete_user(user_id)
+        except KeycloakAdminError as exc:
+            return _keycloak_admin_error_response(exc)
+        return Response(status=status.HTTP_204_NO_CONTENT)

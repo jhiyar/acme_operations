@@ -12,14 +12,15 @@ const BASE_NAV = [
   { to: "/customers", label: "Customers", short: "C" },
 ] as const;
 
+const ADMIN_NAV = [
+  { to: "/observability", label: "Observability", short: "O" },
+] as const;
+
 export function AppShell() {
   const { user, logout } = useAuth();
   const isAdmin = user?.roles.includes("admin") ?? false;
   const navItems = useMemo(
-    () =>
-      isAdmin
-        ? [...BASE_NAV, { to: "/observability", label: "Observability", short: "O" }]
-        : [...BASE_NAV],
+    () => (isAdmin ? [...BASE_NAV, ...ADMIN_NAV] : [...BASE_NAV]),
     [isAdmin],
   );
   const [collapsed, setCollapsed] = useState(() => {

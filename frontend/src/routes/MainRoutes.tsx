@@ -9,6 +9,7 @@ import { ChatPage } from "../features/feature_chat/ChatPage";
 import { CustomersPage } from "../features/feature_customers/CustomersPage";
 import { IssuesPage } from "../features/feature_issues/IssuesPage";
 import { ObservabilityPage } from "../features/feature_observability/ObservabilityPage";
+import { UsersPage } from "../features/feature_users/UsersPage";
 
 export function MainRoutes() {
   return (
@@ -20,6 +21,7 @@ export function MainRoutes() {
           <Route path="/issues" element={<IssuesPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route element={<RequireAdmin />}>
+            <Route path="/users" element={<UsersPage />} />
             <Route path="/observability" element={<ObservabilityPage />} />
           </Route>
           <Route path="/cms/*" element={<CmsRoutes />} />
