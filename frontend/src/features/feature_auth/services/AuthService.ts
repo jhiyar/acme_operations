@@ -21,6 +21,9 @@ const CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "acme-frontend";
 const ACCESS_KEY = "acme.access_token";
 const REFRESH_KEY = "acme.refresh_token";
 
+/** Refresh this many ms before access token expiry. */
+const REFRESH_SKEW_MS = 60_000;
+
 type JwtPayload = {
   sub?: string;
   preferred_username?: string;
@@ -36,12 +39,16 @@ function decodeJwt(token: string): JwtPayload {
     throw new Error("Invalid token");
   }
   const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const json = atob(normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "="));
+  const json = atob(
+    normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "="),
+  );
   return JSON.parse(json) as JwtPayload;
 }
 
 class AuthService {
   private listeners = new Set<() => void>();
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshInFlight: Promise<string | null> | null = null;
 
   get tokenUrl() {
     return `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
@@ -70,6 +77,7 @@ class AuthService {
     return localStorage.getItem(REFRESH_KEY);
   }
 
+  /** Access token present and not expired (with small skew). */
   isAuthenticated(): boolean {
     const token = this.getAccessToken();
     if (!token) {
@@ -84,6 +92,11 @@ class AuthService {
     } catch {
       return false;
     }
+  }
+
+  /** True if we still have a refresh token to try (even if access expired). */
+  hasRefreshToken(): boolean {
+    return Boolean(this.getRefreshToken());
   }
 
   getUser(): AuthUser | null {
@@ -140,9 +153,33 @@ class AuthService {
     return user;
   }
 
+  /**
+   * Ensure a valid access token. Refreshes when expired / near expiry.
+   * Clears session and notifies listeners when refresh is impossible.
+   */
+  async ensureAccessToken(): Promise<string | null> {
+    const token = this.getAccessToken();
+    if (token && this.isAuthenticated()) {
+      return token;
+    }
+    return this.refresh();
+  }
+
   async refresh(): Promise<string | null> {
+    if (this.refreshInFlight) {
+      return this.refreshInFlight;
+    }
+
+    this.refreshInFlight = this.doRefresh().finally(() => {
+      this.refreshInFlight = null;
+    });
+    return this.refreshInFlight;
+  }
+
+  private async doRefresh(): Promise<string | null> {
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) {
+      this.clearSession({ notify: true });
       return null;
     }
 
@@ -152,26 +189,31 @@ class AuthService {
       refresh_token: refreshToken,
     });
 
-    const response = await fetch(this.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
+    try {
+      const response = await fetch(this.tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
 
-    if (!response.ok) {
-      this.clearSession();
+      if (!response.ok) {
+        this.clearSession({ notify: true });
+        return null;
+      }
+
+      const tokens = (await response.json()) as TokenResponse;
+      this.persistTokens(tokens);
+      this.notify();
+      return tokens.access_token;
+    } catch {
+      this.clearSession({ notify: true });
       return null;
     }
-
-    const tokens = (await response.json()) as TokenResponse;
-    this.persistTokens(tokens);
-    this.notify();
-    return tokens.access_token;
   }
 
   async logout() {
     const refreshToken = this.getRefreshToken();
-    this.clearSession();
+    this.clearSession({ notify: false });
     if (refreshToken) {
       const body = new URLSearchParams({
         client_id: CLIENT_ID,
@@ -186,14 +228,61 @@ class AuthService {
     this.notify();
   }
 
+  /** Call on app boot to restore session / schedule refresh. */
+  async bootstrap(): Promise<AuthUser | null> {
+    if (this.isAuthenticated()) {
+      this.scheduleRefresh();
+      return this.getUser();
+    }
+    if (this.hasRefreshToken()) {
+      const token = await this.refresh();
+      return token ? this.getUser() : null;
+    }
+    return null;
+  }
+
   private persistTokens(tokens: TokenResponse) {
     localStorage.setItem(ACCESS_KEY, tokens.access_token);
     localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+    this.scheduleRefresh();
   }
 
-  private clearSession() {
+  private clearSession({ notify }: { notify: boolean }) {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    if (notify) {
+      this.notify();
+    }
+  }
+
+  private scheduleRefresh() {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+
+    const token = this.getAccessToken();
+    if (!token) {
+      return;
+    }
+
+    try {
+      const payload = decodeJwt(token);
+      if (!payload.exp) {
+        return;
+      }
+      const expiresAt = payload.exp * 1000;
+      const delay = Math.max(5_000, expiresAt - Date.now() - REFRESH_SKEW_MS);
+      this.refreshTimer = setTimeout(() => {
+        void this.refresh();
+      }, delay);
+    } catch {
+      // ignore malformed token; next request will clear
+    }
   }
 }
 

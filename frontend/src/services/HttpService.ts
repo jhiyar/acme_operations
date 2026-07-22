@@ -20,15 +20,34 @@ class HttpService {
     });
 
     this.client.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-      let token = authService.getAccessToken();
-      if (token && !authService.isAuthenticated()) {
-        token = await authService.refresh();
-      }
+      const token = await authService.ensureAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
     });
+
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const status = error?.response?.status;
+        const original = error?.config as
+          | (InternalAxiosRequestConfig & { _retry?: boolean })
+          | undefined;
+
+        if (status === 401 && original && !original._retry) {
+          original._retry = true;
+          const token = await authService.refresh();
+          if (token) {
+            original.headers.Authorization = `Bearer ${token}`;
+            return this.client.request(original);
+          }
+          // refresh() already cleared session + notified → RequireAuth → /login
+        }
+
+        return Promise.reject(error);
+      },
+    );
   }
 
   get<T>(url: string, config?: AxiosRequestConfig) {

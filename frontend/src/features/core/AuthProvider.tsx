@@ -24,16 +24,30 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const sync = () => {
       setUser(authService.getUser());
+      setIsAuthenticated(authService.isAuthenticated());
+    };
+
+    const boot = async () => {
+      await authService.bootstrap();
+      if (cancelled) {
+        return;
+      }
+      sync();
       setIsReady(true);
     };
-    sync();
+
+    void boot();
     const unsubscribe = authService.subscribe(sync);
     return () => {
+      cancelled = true;
       unsubscribe();
     };
   }, []);
@@ -41,19 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      isAuthenticated: Boolean(user),
+      isAuthenticated,
       isReady,
       login: async (username, password) => {
         const next = await authService.login(username, password);
         setUser(next);
+        setIsAuthenticated(true);
         return next;
       },
       logout: async () => {
         await authService.logout();
         setUser(null);
+        setIsAuthenticated(false);
       },
     }),
-    [user, isReady],
+    [user, isAuthenticated, isReady],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

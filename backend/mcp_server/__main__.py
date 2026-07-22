@@ -8,6 +8,9 @@ embedding Acme business logic.
 Local demo caveat: tools run as a synthetic Keycloak admin user so MCP callers
 do not need to pass end-user JWTs. Do not treat this as a production auth model.
 
+FastMCP runs tools in an async event loop; Django ORM is sync-only, so each
+tool body is awaited via sync_to_async.
+
 Run (Docker / Python 3.10+):
   python -m mcp_server
 """
@@ -17,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any, Callable
 
 
 def _bootstrap_django() -> None:
@@ -40,6 +44,8 @@ def main() -> None:
             "Run this server inside the Docker mcp service."
         ) from exc
 
+    from asgiref.sync import sync_to_async
+
     from core.services.agent_tool_service import AgentToolService
     from core.services.keycloak_auth_service import KeycloakUser
     from core.skills import CustomerEscalationSummarySkill
@@ -56,42 +62,50 @@ def main() -> None:
             roles=["admin"],
         )
 
+    async def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
+        result = await sync_to_async(fn, thread_sensitive=True)(*args, **kwargs)
+        return json.dumps(result, default=str)
+
     @mcp.tool()
-    def get_customer_profile(customer_name: str) -> str:
+    async def get_customer_profile(customer_name: str) -> str:
         """Retrieve the customer profile using the customer name."""
-        return json.dumps(
-            tools.get_customer_profile(customer_name, user=_svc_user()),
-            default=str,
+        return await _call(
+            tools.get_customer_profile,
+            customer_name,
+            user=_svc_user(),
         )
 
     @mcp.tool()
-    def get_open_issues_for_customer(customer_name: str) -> str:
+    async def get_open_issues_for_customer(customer_name: str) -> str:
         """Retrieve open issues for a customer (supports keyword match)."""
-        return json.dumps(
-            tools.get_open_issues_for_customer(customer_name, user=_svc_user()),
-            default=str,
+        return await _call(
+            tools.get_open_issues_for_customer,
+            customer_name,
+            user=_svc_user(),
         )
 
     @mcp.tool()
-    def summarise_issue_history(issue_id: int) -> str:
+    async def summarise_issue_history(issue_id: int) -> str:
         """Summarise the history of a specific issue."""
-        return json.dumps(
-            tools.summarise_issue_history(issue_id, user=_svc_user()),
-            default=str,
+        return await _call(
+            tools.summarise_issue_history,
+            issue_id,
+            user=_svc_user(),
         )
 
     @mcp.tool()
-    def create_next_action(issue_id: int) -> str:
+    async def create_next_action(issue_id: int) -> str:
         """Generate and persist a recommended next action for an issue."""
-        return json.dumps(
-            tools.create_next_action(issue_id, user=_svc_user()),
-            default=str,
+        return await _call(
+            tools.create_next_action,
+            issue_id,
+            user=_svc_user(),
         )
 
     @mcp.tool()
-    def customer_escalation_summary(customer_name: str) -> str:
+    async def customer_escalation_summary(customer_name: str) -> str:
         """Run the Customer Escalation Summary skill for a customer."""
-        return json.dumps(skill.run(customer_name, _svc_user()), default=str)
+        return await _call(skill.run, customer_name, _svc_user())
 
     transport = os.environ.get("MCP_TRANSPORT", "sse")
     host = os.environ.get("MCP_HOST", "0.0.0.0")

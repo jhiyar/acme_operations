@@ -27,6 +27,7 @@ Demo users (Keycloak):
 | `support` | `support123` | support_user (read + update issues + next actions) |
 | `admin` | `admin123` | admin (all issues + updates + next actions) |
 
+
 ## Architecture diagram
 
 ```mermaid
@@ -108,6 +109,7 @@ Strategic choices for a reviewable prototype — what we accepted, and why.
 
 | Choice | What we gained | What we accepted |
 |--------|----------------|------------------|
+| **Django + DRF over FastAPI** | Built-in ORM, migrations, admin, and a mature request/response stack — less glue for CRUD-heavy domain data (customers, issues, chat, traces) | Heavier than a thin API-only framework; FastAPI is often faster for pure async I/O APIs, but ships no ORM — you’d add SQLAlchemy/SQLModel and wire migrations yourself |
 | **LangGraph + LangChain** | A real ReAct agent loop, tool tracing, LangSmith, and Anthropic/OpenAI behind one switch | A heavier dependency than a tiny custom loop — worth it because the same stack supports evals, tracing, and future multi-step workflows |
 | **In-app chat vs MCP** | Chat uses the signed-in user’s roles; MCP exposes the same tools to external hosts (Cursor, etc.) | MCP runs as a demo **admin** identity so callers don’t need to pass end-user tokens. Real RBAC is on the API/chat path; MCP auth is not production-ready |
 | **Keycloak-only users** | Login and roles live in Keycloak; the API reads them from the JWT | No app `users` / `user_roles` tables in Postgres — Keycloak already owns that job, so we don’t keep a second copy to sync |
